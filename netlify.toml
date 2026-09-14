@@ -1,0 +1,8 @@
+[build]
+  command = "npm run build"
+  publish = "out"
+
+[build.environment]
+  NEXT_TELEMETRY_DISABLED = "1"
+
+# SPA-safe: static export produces a directory per route (trailingSlash)

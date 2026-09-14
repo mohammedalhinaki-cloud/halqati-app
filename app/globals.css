@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .card {
+    @apply rounded-xl border-2 border-slate-700 bg-white shadow-sm;
+  }
+  .field-label {
+    @apply mb-1 block text-[13px] font-bold text-slate-600;
+  }
+  .field {
+    @apply w-full rounded-lg border border-slate-400 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-1 rounded-lg px-3 py-1.5 text-sm font-bold transition active:scale-95;
+  }
+}
+
+/* the official-paper look: dense grid table */
+.paper-table th,
+.paper-table td {
+  border: 1px solid #94a3b8;
+  padding: 0.3rem 0.4rem;
+  text-align: center;
+  vertical-align: middle;
+}
+.paper-table thead th {
+  background: #e2e8f0;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  .card {
+    box-shadow: none !important;
+    border-width: 1px !important;
+    break-inside: avoid;
+  }
+  .paper-table tr {
+    break-inside: avoid;
+  }
+}

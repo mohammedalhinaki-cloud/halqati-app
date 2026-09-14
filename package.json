@@ -1,0 +1,31 @@
+{
+  "name": "quran-halaqa-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "بطاقة متابعة الحفظ والمراجعة — Quran Halaqa Tracker (Next.js 14 + Tailwind, static, localStorage)",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0 -p 3000",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0",
+    "gen": "node scripts/gen-quran.mjs",
+    "test": "node scripts/test-plan.mjs",
+    "pretest": "npm run gen",
+    "test:ui": "npx esbuild scripts/render-test.mjs --bundle --platform=node --format=esm --outfile=.tmp-render-test.mjs --loader:.jsx=jsx --jsx=automatic --packages=external --log-level=error && node .tmp-render-test.mjs && rm -f .tmp-render-test.mjs",
+    "test:all": "npm test && npm run test:ui"
+  },
+  "dependencies": {
+    "next": "^14.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "esbuild": "^0.28.2",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14"
+  },
+  "type": "module"
+}
