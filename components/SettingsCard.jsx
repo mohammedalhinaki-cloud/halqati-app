@@ -1,10 +1,11 @@
 'use client';
-import { workingDayCount } from '../lib/plan';
+import { workingDayCount, hijriInfo, weekdayName } from '../lib/plan';
 import { arNum } from '../lib/quran';
 
 export default function SettingsCard({ settings, onChange }) {
   const days = workingDayCount(settings);
-  const holidayCount = settings.holidays.split(/[,،\s]+/).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s)).length;
+  const hol = settings.holidays.split(/[,،\s]+/).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s));
+  const holidayCount = hol.length;
   return (
     <section className="card p-4" aria-label="الإعدادات العامة">
       <div className="mb-3 flex items-center justify-between">
@@ -33,9 +34,20 @@ export default function SettingsCard({ settings, onChange }) {
         </label>
       </div>
       <p className="mt-2 text-xs text-slate-500">
-        عدد أيام الدراسة في الفترة: <b className="text-slate-800">{arNum(days)}</b> يومًا · سيتم تخطي{' '}
-        <b className="text-slate-800">{arNum(holidayCount)}</b> يوم إجازة تلقائيًا (تُعرض في الجدول كشريط «إجازة»).
+        المقابل الهجري: البداية <b className="font-extrabold text-slate-800">{hijriInfo(settings.startDate).full}</b> · النهاية{' '}
+        <b className="font-extrabold text-slate-800">{hijriInfo(settings.endDate).full}</b> — عدد أيام الدراسة:{' '}
+        <b className="text-slate-800">{arNum(days)}</b> يومًا.
       </p>
+      {holidayCount > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {hol.map((h) => (
+            <span key={h} className="rounded-full bg-slate-800 px-2.5 py-0.5 text-[11px] font-bold text-white">
+              ☾ {weekdayName(h)} · {hijriInfo(h).dm} {hijriInfo(h).y}
+            </span>
+          ))}
+          <span className="text-[11px] text-slate-400 self-center">— تُعرض في الجدول كشريط «إجازة» وتُتخطى تلقائيًا</span>
+        </div>
+      )}
     </section>
   );
 }

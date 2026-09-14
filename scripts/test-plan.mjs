@@ -1,6 +1,6 @@
 /* Logic test — runs the real lib/plan.js + lib/quran.js the app uses. */
 import assert from 'assert';
-import { buildPlan, workingDayCount, calendarDays, weekKey } from '../lib/plan.js';
+import { buildPlan, workingDayCount, calendarDays, weekKey, hijriInfo, weekdayName } from '../lib/plan.js';
 import { amountLabel, rangeStartQ, rangeEndQ, spanLabel, surahByNumber } from '../lib/quran.js';
 
 let n = 0;
@@ -99,5 +99,15 @@ assert.equal(weekKey('2026-09-22'), '2026-09-20');
 assert.equal(weekKey('2026-09-23'), '2026-09-20');
 assert.equal(weekKey('2026-09-27'), '2026-09-27');
 ok('week grouping (Sun=anchor, Wed same week, next Sun = next week)');
+
+/* 11. Hijri (Umm al-Qura) labels */
+const hj = hijriInfo('2026-09-20');
+assert.equal(hj.dm.includes('ربيع الآخر'), true, 'Sept 20 2026 is in Rabi al-Thani 1448');
+assert.equal(hj.y, '١٤٤٨هـ', 'hijri year with era');
+assert.ok(/^[٠-٩]+ .+$/.test(hj.dm), 'day is Arabic-Indic numeral');
+assert.equal(hijriInfo('').dm, '—', 'invalid date guarded');
+assert.ok(['الأحد','الاثنين','الثلاثاء','الأربعاء'].includes(weekdayName('2026-09-20')), 'weekday name (ar)');
+console.log('    sample hijri label:', JSON.stringify(hj));
+ok('hijri labels (Umm al-Qura) + invalid-date guard');
 
 console.log(`\nALL ${n} PLAN/QURAN CHECKS PASSED`);

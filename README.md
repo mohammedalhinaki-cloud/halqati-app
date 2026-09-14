@@ -8,7 +8,9 @@ Next.js 14 (App Router) → **static export**, one-click deployable on Netlify.
 
 ## Features
 
-- **General settings (editable anytime):** start date, end date, holidays
+- **Dates shown in Hijri (Umm al-Qura, Saudi official calendar)** everywhere — plan table, week
+  bands and holiday rows display e.g. "٩ ربيع الآخر ١٤٤٨هـ"; the settings date inputs are native
+  Gregorian controls with the Hijri equivalent previewed live right under them.
   (`YYYY-MM-DD`, comma-separated). Working days are fixed **Sunday–Wednesday**;
   holidays are skipped automatically and shown as a dark «إجازة» band like the paper card.
 - **Unlimited students** per halaqa, with: name, guardian phone, level

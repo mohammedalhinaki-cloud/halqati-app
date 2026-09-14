@@ -34,7 +34,7 @@ const need = [
   'نصف وجه', // base amount label
 ];
 let fail = 0;
-for (const t of ['أحمد بن محمد العتيبي', 'لم يحفظ', 'إجازة', 'مؤجَّل', 'الأحقاف', 'نتيجة الفترة', 'الأسبوع', 'نصف وجه', 'ربع وجه', 'غائب']) {
+for (const t of ["أحمد بن محمد العتيبي","لم يحفظ","إجازة","مؤجَّل","الأحقاف","نتيجة الفترة","الأسبوع","نصف وجه","ربع وجه","غائب","ربيع الآخر","جمادى","(هجري)","١٤٤٨هـ"]) {
   const ok2 = html.includes(t);
   if (!ok2) { fail++; console.error('MISSING in rendered HTML:', t); } else console.log('  ✓ render contains', JSON.stringify(t));
 }

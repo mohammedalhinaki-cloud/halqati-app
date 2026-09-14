@@ -1,6 +1,6 @@
 'use client';
 import { useMemo } from 'react';
-import { buildPlan, weekKey, weekdayName, dateLabels } from '../lib/plan';
+import { buildPlan, weekKey, weekdayName, hijriInfo } from '../lib/plan';
 import { amountLabel, arNum, arDec, spanLabel, AMOUNT_OPTS, AMOUNT_OPTS_OPTIONAL, toQ } from '../lib/quran';
 import { LEVELS } from '../lib/store';
 
@@ -27,7 +27,7 @@ function Stat({ label, value, cls }) {
 }
 
 function DayRow({ row, onStatus }) {
-  const dl = dateLabels(row.date);
+  const hj = hijriInfo(row.date);
   const b = row.toQ > row.fromQ ? row.toQ : row.fromQ + row.amountQ;
   const lbl = spanLabel(row.fromQ, b);
   const st = row.status ? STATUS_STYLE[row.status] : null;
@@ -36,10 +36,8 @@ function DayRow({ row, onStatus }) {
     <tr className={DAY_CELL(row)}>
       <td className="font-bold whitespace-nowrap">{weekdayName(row.date)}</td>
       <td className="whitespace-nowrap">
-        <div className="font-bold" dir="ltr">
-          {arNum(`${dl.day}/${dl.month}`)}
-        </div>
-        <div className="text-[10px] text-slate-400">{dl.hijri}</div>
+        <div className="text-[13px] font-extrabold text-slate-800">{hj.dm}</div>
+        <div className="text-[10px] text-slate-400">{hj.y}</div>
         {row.beyondPlan && <div className="text-[10px] font-bold text-rose-600">بعد نهاية الخطة</div>}
       </td>
       <td>
@@ -154,7 +152,7 @@ export default function StudentPlan({ student, settings, onStatus, onClear }) {
           <thead>
             <tr>
               <th>اليوم</th>
-              <th>التاريخ</th>
+              <th>التاريخ <span className="text-[10px] font-bold text-slate-500">(هجري)</span></th>
               <th>السورة</th>
               <th>المقدار</th>
               <th>الحالة</th>
@@ -202,19 +200,20 @@ export default function StudentPlan({ student, settings, onStatus, onClear }) {
 }
 
 function FragmentWeek({ n, w, s, dayRows, onStatus }) {
-  const first = w.rows[0]?.date;
+  const fr = w.rows[0], lr = w.rows[w.rows.length - 1];
+  const range = !fr ? '' : fr.date === lr.date ? hijriInfo(fr.date).dm : `${hijriInfo(fr.date).dm} ← ${hijriInfo(lr.date).dm}`;
   return (
     <>
       <tr className="bg-slate-200/70 text-[12px] font-extrabold text-slate-700">
         <td colSpan={6} className="text-right">
-          الأسبوع {arNum(n)} <span className="font-normal text-slate-500">· {first}</span>
+          الأسبوع {arNum(n)} <span className="font-normal text-slate-500">· {range}</span>
         </td>
       </tr>
       {w.rows.map((r) =>
         r.type === 'holiday' ? (
           <tr key={r.date} className="bg-slate-800 text-white">
             <td colSpan={6} className="py-1 text-[13px] font-bold tracking-wide">
-              ☾ إجازة — يوم {weekdayName(r.date)} {arNum(dateLabels(r.date).day)}/{arNum(dateLabels(r.date).month)} — لا يوجد حفظ أو مراجعة
+              ☾ إجازة — يوم {weekdayName(r.date)} {hijriInfo(r.date).full} — لا يوجد حفظ أو مراجعة
             </td>
           </tr>
         ) : (
