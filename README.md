@@ -4,7 +4,7 @@ A simple, fast, single-page tracker for Quran memorization halaqas — modeled o
 Tahfiz-association follow-up cards (بطاقة متابعة الحفظ والمراجعة). RTL Arabic, Tailwind, no backend:
 everything persists in the browser via `localStorage`.
 
-Next.js 14 (App Router) → **static export**, one-click deployable on Netlify.
+Next.js 14 (App Router) → **static export**, deployed **only** via GitHub Pages (see below).
 
 ## Features
 
@@ -38,7 +38,7 @@ npm run test:ui   # render smoke test (real React components)
 npm run test:all  # both
 ```
 
-## Deploy to GitHub Pages (primary)
+## Deploy to GitHub Pages (official & only deploy target)
 
 `.github/workflows/deploy.yml` builds the static export and publishes `out/` on every push to
 `main`. Two one-time settings on the repo:
@@ -46,16 +46,6 @@ npm run test:all  # both
 1. **Settings → Pages → Source: GitHub Actions**
 2. Pages needs a **public repo** (or GitHub Pro). Then the site is at
    `https://<owner>.github.io/halqati-app/` (matches the committed `basePath: '/halqati-app'`).
-
-## Deploy to Netlify
-
-`netlify.toml` is included (build `npm run build`, publish `out`):
-
-1. Push this repo to GitHub.
-2. Netlify → *Add new site → Import an existing project* → pick the repo.
-3. Nothing else to configure — the site is fully static.
-
-Drag-and-drop `./out` on Netlify also works.
 
 ## Data & accuracy notes
 
@@ -94,8 +84,7 @@ data/                raw source JSONs for regeneration
 
 `manifest.webmanifest` + service worker + icons (192/512/maskable/180) ship in `public/` —
 Add-to-home-screen works on Android/Chrome and iOS/Safari (share → Add to Home Screen).
-All manifest/link URLs are relative, so one build serves correctly both under the Pages
-subpath and at Netlify's root (netlify.toml rewrites the prefixed asset paths back).
+All manifest/link URLs are relative, so one build serves correctly under the Pages subpath.
 Regenerate icons: `python3 scripts/gen-icons.py`.
 
 MIT license.
