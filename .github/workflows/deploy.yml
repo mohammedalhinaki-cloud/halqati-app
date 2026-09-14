@@ -26,9 +26,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: Verify export
+        run: |
+          test -f out/index.html || { echo "out/index.html missing"; exit 1; }
+          test -f out/.nojekyll || echo "warning: .nojekyll missing"
+          grep -q "_next" out/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out
+          if-no-files-found: error
 
   deploy:
     needs: build

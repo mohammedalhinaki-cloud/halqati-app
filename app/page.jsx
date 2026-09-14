@@ -16,7 +16,28 @@ export default function Home() {
       loaded = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
     } catch {}
     setDb(loaded && loaded.settings && Array.isArray(loaded.students) ? loaded : seedState());
+    if (typeof window !== 'undefined') window.__appBooted = true; // cancel the 3s fallback banner
   }, []);
+
+  // extra failsafe: if state is somehow still unset after 3s, boot with seed anyway
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDb((s) => {
+        if (!s) {
+          try {
+            const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+            return raw && raw.settings ? raw : seedState();
+          } catch {
+            return seedState();
+          }
+        }
+        return s;
+      });
+      if (typeof window !== 'undefined') window.__appBooted = true;
+    }, 3000);
+    return () => clearTimeout(t);
+  }, []);
+
 
   useEffect(() => {
     if (!db) return;

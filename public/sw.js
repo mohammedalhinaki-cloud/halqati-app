@@ -1,6 +1,6 @@
 /* Simple app-shell service worker: cache-first for same-origin GETs,
    network fallback, offline fallback to the start page. */
-const CACHE = 'halqati-v1';
+const CACHE = 'halqati-v2';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
