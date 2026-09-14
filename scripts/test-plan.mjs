@@ -1,6 +1,7 @@
 /* Logic test — runs the real lib/plan.js + lib/quran.js the app uses. */
 import assert from 'assert';
 import { buildPlan, workingDayCount, calendarDays, weekKey, hijriInfo, weekdayName } from '../lib/plan.js';
+import { gregToHijri, hijriToGreg, daysInHijriMonth, formatHijri, HIJRI_MONTHS } from '../lib/hijri.js';
 import { amountLabel, rangeStartQ, rangeEndQ, spanLabel, surahByNumber } from '../lib/quran.js';
 
 let n = 0;
@@ -111,5 +112,29 @@ assert.equal(hijriInfo('').dm, '—', 'invalid date guarded');
 assert.ok(['الأحد','الاثنين','الثلاثاء','الأربعاء'].includes(weekdayName('2026-09-20')), 'weekday name (ar)');
 console.log('    sample hijri label:', JSON.stringify(hj));
 ok('hijri labels (Umm al-Qura) + invalid-date guard');
+
+/* 12. lib/hijri.js — picker engine vs Intl formatter must never drift */
+{
+  const HIJ = new Intl.DateTimeFormat('en-US-u-ca-islamic-umalqura', { day: 'numeric', month: 'numeric', year: 'numeric' });
+  let g = new Date(2026, 8, 1);
+  for (let i = 0; i < 150; i++) {
+    const d = new Date(g.getFullYear(), g.getMonth(), g.getDate() + i);
+    const iso = [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+    const p = {}; for (const x of HIJ.formatToParts(d)) p[x.type] = x.value;
+    const h = gregToHijri(iso);
+    assert.equal(h.y, +p.year, 'year match ' + iso);
+    assert.equal(h.m, +p.month, 'month match ' + iso);
+    assert.equal(h.d, +p.day, 'day match ' + iso);
+    assert.equal(hijriToGreg(h.y, h.m, h.d), iso, 'roundtrip ' + iso);
+    const len = daysInHijriMonth(h.y, h.m);
+    assert.ok(len === 29 || len === 30, 'month length ' + len);
+  }
+  assert.equal(HIJRI_MONTHS.length, 12);
+  assert.equal(HIJRI_MONTHS[0], '\u0645\u062d\u0631\u0645');
+  const fh = formatHijri('2026-09-20');
+  assert.ok(fh.includes('\u0631\u0628\u064a\u0639') && fh.includes('\u0647\u0640'), 'formatHijri shape: ' + fh);
+  console.log('    formatHijri(2026-09-20) =', fh);
+}
+ok('hijri.js: engine==Intl over 150 days + roundtrips + month lengths + labels');
 
 console.log(`\nALL ${n} PLAN/QURAN CHECKS PASSED`);

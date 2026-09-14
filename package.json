@@ -17,6 +17,8 @@
     "test:all": "npm test && npm run test:ui"
   },
   "dependencies": {
+    "moment": "^2.30.1",
+    "moment-hijri": "^3.0.0",
     "next": "^14.2.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
