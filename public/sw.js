@@ -1,15 +1,12 @@
-/* Simple app-shell service worker: cache-first for same-origin GETs,
-   network fallback, offline fallback to the start page. */
-const CACHE = 'halqati-v2';
+/* App-shell service worker v3.
+   Pages (navigation) are fetched NETWORK-FIRST so a deploy is visible on the
+   very next reload, falling back to cache when offline.
+   Hashed build assets / icons / manifest are cache-first (immutable filenames).
+   Any stale cache from an older CACHE version is purged on activate. */
+const CACHE = 'halqati-v3';
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches
-      .open(CACHE)
-      .then((c) => c.addAll(['./', './index.html', './manifest.webmanifest']))
-      .catch(() => {})
-      .then(() => self.skipWaiting())
-  );
+self.addEventListener('install', () => {
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
@@ -21,24 +18,44 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+self.addEventListener('message', (e) => {
+  if (e.data === 'SKIPME') self.skipWaiting();
+});
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put('./', copy));
+          return res;
+        })
+        .catch(() =>
+          caches.match(req).then(
+            (hit) => hit || caches.match('./').then((h) => h || caches.match('./index.html'))
+          )
+        )
+    );
+    return;
+  }
+
   e.respondWith(
-    caches.match(req, { ignoreSearch: false }).then(
+    caches.match(req).then(
       (hit) =>
         hit ||
-        fetch(req)
-          .then((res) => {
-            if (res && res.ok) {
-              const copy = res.clone();
-              caches.open(CACHE).then((c) => c.put(req, copy));
-            }
-            return res;
-          })
-          .catch(() => (req.mode === 'navigate' ? caches.match('./') : undefined))
+        fetch(req).then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(req, copy));
+          }
+          return res;
+        })
     )
   );
 });

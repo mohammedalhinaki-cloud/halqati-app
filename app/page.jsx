@@ -52,12 +52,34 @@ export default function Home() {
   // PWA service worker (scope-relative -> works on Pages subpath and Netlify root)
   useEffect(() => {
     if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
-    const reg = () => navigator.serviceWorker.register('./sw.js').catch(() => {});
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      // new worker took over (its caches are fresh) -> swap the page once, no loop
+      if (!reloaded) {
+        reloaded = true;
+        location.reload();
+      }
+    });
+    const reg = () =>
+      navigator.serviceWorker
+        .register('./sw.js')
+        .then(async (r) => {
+          try {
+            await r.update(); // force re-download of sw.js (bypasses HTTP cache)
+          } catch {}
+          r.addEventListener('updatefound', () => {
+            const nw = r.installing;
+            if (!nw) return;
+            nw.addEventListener('statechange', () => {
+              if (nw.state === 'installed' && navigator.serviceWorker.controller) nw.postMessage('SKIPME');
+            });
+          });
+        })
+        .catch(() => {});
     if (document.readyState === 'complete') reg();
     else window.addEventListener('load', reg);
     return () => window.removeEventListener('load', reg);
   }, []);
-
 
   const setSettings = useCallback((patch) => setDb((s) => ({ ...s, settings: { ...s.settings, ...patch } })), []);
   const addStudent = useCallback((st) => setDb((s) => ({ ...s, students: [...s.students, st], activeId: st.id })), []);
