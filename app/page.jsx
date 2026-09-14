@@ -5,7 +5,10 @@ import AddStudentForm from '../components/AddStudentForm';
 import StudentTabs from '../components/StudentTabs';
 import StudentPlan from '../components/StudentPlan';
 import { STORAGE_KEY, seedState } from '../lib/store';
-import { META } from '../lib/quran';
+import { META, SURAHS } from '../lib/quran';
+import { arDec, arNum } from '../lib/quran';
+
+const FULL_QURAN_FACES = (SURAHS[SURAHS.length - 1].endQ - SURAHS[0].startQ) / META.quartersPerPage;
 
 export default function Home() {
   const [db, setDb] = useState(null);
@@ -128,7 +131,8 @@ export default function Home() {
 
         <footer className="pb-6 text-center text-[11px] leading-5 text-slate-400">
           كل شيء محفوظ محليًا في متصفحك (localStorage) — بدون خادم. حساب الأوجه مبني على ترقيم مصحف المدينة (Tanzil / Quran.com):
-          من الأحقاف إلى الناس = ١٠٢٫٥ وجهًا (٥٠٢←٦٠٤).
+          القرآن كاملاً (الفاتحة ← الناس) = <b className="text-slate-500">{arDec(FULL_QURAN_FACES)} وجهًا</b> (من صفحة {arNum(SURAHS[0].page)} إلى صفحة {arNum(META.pages)}).
+          المدى لكل طالب قابل للتعديل عند الإضافة — والافتراض حفظ المصحف كاملاً.
         </footer>
       </div>
     </main>

@@ -26,7 +26,7 @@ const need = [
   'لم يحفظ', // status buttons
   'إجازة', // holiday band row
   'مؤجَّل', // carry tag from missed day cascade
-  'الأحقاف', // surah label
+  'الفاتحة', // surah label
   'ثلاثة أرباع', // sughra chip (0.75? actually 0.25=ربع) -> check below instead
   'وجه ونصف', // cascaded amount (2 + 2 quarters => وجه? demo: 22nd amt=1.0 وجه ; 27th: 2+2=2 → وجه) — assert loosely below
   'نتيجة الفترة', // per-week result band

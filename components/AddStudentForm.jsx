@@ -32,7 +32,7 @@ export default function AddStudentForm({ onAdd }) {
     level: 'ibtida-i',
     halaqa: '',
     dailyHifz: 0.25,
-    from: 46,
+    from: 1,
     to: 114,
     sughra: 0.25,
     kubra: 0.5,

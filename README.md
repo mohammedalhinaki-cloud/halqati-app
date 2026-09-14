@@ -16,7 +16,7 @@ Next.js 14 (App Router) → **static export**, one-click deployable on Netlify.
 - **Unlimited students** per halaqa, with: name, guardian phone, level
   (ابتدائي / متوسط / ثانوي), halaqa name, daily **hifz** amount
   (¼ / ½ / ¾ / 1 / 1½ face), *sughra* & *kubra* daily review, and a from/to surah
-  range (defaults: **Al-Ahqaf → An-Nas**).
+  range (defaults: **Al-Fatiha → An-Nas**, i.e. the full 604-face mushaf).
 - **Accurate Madinah-mushaf math:** every amount maps to exact quarter-faces
   (¼ وجه ≈ 4 lines of 15 per page). Surah/ ayah spans per day are computed from real
   Tanzil/Quran.com pagination data (see *Data* below).

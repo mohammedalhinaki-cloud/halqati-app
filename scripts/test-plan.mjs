@@ -24,6 +24,8 @@ assert.deepEqual(days.map((r) => r.fromQ), [2006, 2008, 2010, 2012, 2014, 2016, 
 assert.equal(p.totalQ, 410);
 assert.equal(rangeStartQ(46), 2006);
 assert.equal(rangeEndQ(114), 2416);
+assert.equal(rangeStartQ(1), 0, 'Al-Fatiha starts the mushaf');
+assert.equal((rangeEndQ(114) - rangeStartQ(1)) / 4, 604, 'full Quran = 604 faces');
 ok('pending days project sequentially (+2 quarters/day; range = 410 q = 102.5 faces)');
 
 /* 3. holiday row exists */
