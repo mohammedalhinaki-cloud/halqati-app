@@ -38,6 +38,15 @@ npm run test:ui   # render smoke test (real React components)
 npm run test:all  # both
 ```
 
+## Deploy to GitHub Pages (primary)
+
+`.github/workflows/deploy.yml` builds the static export and publishes `out/` on every push to
+`main`. Two one-time settings on the repo:
+
+1. **Settings → Pages → Source: GitHub Actions**
+2. Pages needs a **public repo** (or GitHub Pro). Then the site is at
+   `https://<owner>.github.io/halqati.app/` (matches the committed `basePath: '/halqati.app'`).
+
 ## Deploy to Netlify
 
 `netlify.toml` is included (build `npm run build`, publish `out`):
@@ -80,5 +89,13 @@ lib/                 quran.js (mushaf math + Arabic labels), plan.js (calendar +
 scripts/             gen-quran.mjs (data pipeline), render-test.mjs, test-plan.mjs
 data/                raw source JSONs for regeneration
 ```
+
+## PWA (installable)
+
+`manifest.webmanifest` + service worker + icons (192/512/maskable/180) ship in `public/` —
+Add-to-home-screen works on Android/Chrome and iOS/Safari (share → Add to Home Screen).
+All manifest/link URLs are relative, so one build serves correctly both under the Pages
+subpath and at Netlify's root (netlify.toml rewrites the prefixed asset paths back).
+Regenerate icons: `python3 scripts/gen-icons.py`.
 
 MIT license.

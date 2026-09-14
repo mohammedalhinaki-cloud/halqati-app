@@ -5,4 +5,9 @@
 [build.environment]
   NEXT_TELEMETRY_DISABLED = "1"
 
-# SPA-safe: static export produces a directory per route (trailingSlash)
+# The build carries basePath /halqati.app (for GitHub Pages).
+# On Netlify's root domain, rewrite prefixed asset URLs back to root.
+[[redirects]]
+  from = "/halqati.app/*"
+  to = "/:splat"
+  status = 200

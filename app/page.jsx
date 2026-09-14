@@ -25,6 +25,16 @@ export default function Home() {
     } catch {}
   }, [db]);
 
+  // PWA service worker (scope-relative -> works on Pages subpath and Netlify root)
+  useEffect(() => {
+    if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+    const reg = () => navigator.serviceWorker.register('./sw.js').catch(() => {});
+    if (document.readyState === 'complete') reg();
+    else window.addEventListener('load', reg);
+    return () => window.removeEventListener('load', reg);
+  }, []);
+
+
   const setSettings = useCallback((patch) => setDb((s) => ({ ...s, settings: { ...s.settings, ...patch } })), []);
   const addStudent = useCallback((st) => setDb((s) => ({ ...s, students: [...s.students, st], activeId: st.id })), []);
   const removeStudent = useCallback(
