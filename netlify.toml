@@ -5,9 +5,9 @@
 [build.environment]
   NEXT_TELEMETRY_DISABLED = "1"
 
-# The build carries basePath /halqati.app (for GitHub Pages).
+# The build carries basePath /halqati-app (for GitHub Pages).
 # On Netlify's root domain, rewrite prefixed asset URLs back to root.
 [[redirects]]
-  from = "/halqati.app/*"
+  from = "/halqati-app/*"
   to = "/:splat"
   status = 200

@@ -45,7 +45,7 @@ npm run test:all  # both
 
 1. **Settings → Pages → Source: GitHub Actions**
 2. Pages needs a **public repo** (or GitHub Pro). Then the site is at
-   `https://<owner>.github.io/halqati.app/` (matches the committed `basePath: '/halqati.app'`).
+   `https://<owner>.github.io/halqati-app/` (matches the committed `basePath: '/halqati-app'`).
 
 ## Deploy to Netlify
 
