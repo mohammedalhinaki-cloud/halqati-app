@@ -93,12 +93,15 @@ function DayRow({ row, student, onStatus }) {
       <td>
         {row.empty ? (
           <span className="text-slate-400">اكتمل المطلوب — لا جديد</span>
-        ) : row.status === 'missed' || row.status === 'absent' ? (
-          <span className="font-bold text-rose-600">— {row.status === 'missed' ? 'لم يحفظ' : 'غائب'}: اليوم أُجِّل بالكامل</span>
         ) : (
           <>
             <div className="font-bold text-slate-800">سورة {lbl ? lbl.surah : '—'}</div>
             <div className="text-[11px] text-slate-500">{lbl ? lbl.range : ''}</div>
+            {(row.status === 'missed' || row.status === 'absent') && row.rolledToNext > 0 && (
+              <div className="mt-0.5 inline-block rounded bg-rose-100 px-1.5 text-[10px] font-bold text-rose-700">
+                ↩ {amountLabel(row.rolledToNext)} ينزاح لغدٍ — بدون دمج في يوم واحد
+              </div>
+            )}
           </>
         )}
         <div className="mt-0.5 flex flex-wrap items-center gap-1">

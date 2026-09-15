@@ -43,7 +43,7 @@ assert.equal(days[1].status, 'missed');
 assert.equal(days[1].qLo, 2008, '21st red cell = its own slice only (no merge)');
 assert.equal(days[1].qHi, 2010);
 assert.equal(days[1].plannedQ, 0, 'missed day saves nothing');
-assert.equal(days[1].qHi, null, 'missed day has no content (red, shifted)');
+assert.equal(days[1].qHi, 2010, 'red cell shows its own slice');
 assert.equal(days[2].amountQ, 2, 'next day keeps EXACTLY its daily dose — no merge, no burdening');
 assert.equal(days[2].qLo, 2008, '22nd = slot1 = Monday content (Sunday missed -> Monday content on Tuesday...); 21st stays red-empty');
 assert.ok(days[2].amountQ === 2, 'dose stays exactly base 2');
@@ -51,7 +51,7 @@ assert.equal(days[2].shiftedBy, 1, 'one miss before this day — plan shifted by
 assert.equal(days[1].shiftBefore, 0, 'the missed day itself had no shift before it');
 assert.equal(days[1].shiftedBy, 1, 'after it, the plan carries one permanent day of delay');
 assert.equal(days[0].qLo, 2006, 'day 1 starts at range start');
-assert.equal(days[1].qLo, null, 'missed day shows NO content (kept red/shifted)');
+assert.equal(days[1].qLo, 2008, 'missed red cell keeps its own slice (visible), content re-runs tomorrow');
 assert.equal(days[3].qLo, 2010, 'following days each shifted by exactly one slot — the whole plan slides');
 assert.equal(days[4].qLo, 2012, 'delay persists forever, never merged');
 ok('missed day → red + full one-day slide (SHIFT, never merge)');
