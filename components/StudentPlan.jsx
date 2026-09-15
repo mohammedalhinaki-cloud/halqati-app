@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { buildPlan, weekKey, weekdayName, hijriInfo } from '../lib/plan';
-import { amountLabel, arNum, arDec, spanLabel, QPP } from '../lib/quran';
+import { amountLabel, arNum, arDec, spanLabel, QPP, AMOUNT_OPTS, ayahRangeQ } from '../lib/quran';
 import { LEVELS } from '../lib/store';
 
 const HIFZ_STYLE = {
@@ -76,12 +76,15 @@ function CtlBtns({ value, onPick, opts }) {
   );
 }
 
-function MarkCell({ label, span, status, amount, style, preview, deferred, dueTxt, onPick, opts, badge }) {
+function MarkCell({ label, span, status, amount, style, preview, deferred, dueTxt, onPick, opts, badge, onEditAmount }) {
   const lbl = span && span.qLo != null && span.qHi > span.qLo ? spanLabel(span.qLo, span.qHi) : null;
   const st = status ? style[status] : null;
   return (
     <td className={'align-top border-r border-slate-100 ' + (status === 'missed' || status === 'absent' ? 'bg-rose-50/60' : status === 'done' || status === 'saved' ? 'bg-emerald-50/50' : '')}>
-      <div className="mb-0.5 text-[10px] font-extrabold tracking-wide text-slate-400">{label}</div>
+      <div className="mb-0.5 flex items-center justify-between text-[10px] font-extrabold tracking-wide text-slate-400">
+        <span>{label}</span>
+        {onEditAmount && <button type="button" onClick={onEditAmount} className="rounded px-1 text-base leading-3 text-slate-500 hover:bg-slate-200" aria-label="تعديل مقدار الخلية">⋮</button>}
+      </div>
       <div className="text-[12px] leading-5">
         {lbl ? (
           <span className={preview ? 'italic text-slate-400' : 'font-bold text-slate-800'}>
@@ -116,12 +119,13 @@ function MarkCell({ label, span, status, amount, style, preview, deferred, dueTx
   );
 }
 
-function DayRow({ row, student, onStatus }) {
+function DayRow({ row, student, onStatus, onEditAmount }) {
   const hj = hijriInfo(row.date);
   const pick = (stream, v) => {
     const cur = stream === 'hifz' ? row.status : row[stream] && row[stream].status;
     onStatus(row.date, stream, cur === v ? null : v);
   };
+  const editAmount = (stream) => onEditAmount && onEditAmount(row, stream);
   const H = [
     ['saved', 'حفظ', 'bg-emerald-600'],
     ['missed', 'لم يحفظ', 'bg-rose-600'],
@@ -153,6 +157,7 @@ function DayRow({ row, student, onStatus }) {
         dueTxt={row.empty ? 'اكتمل المدى — لا جديد' : '—'}
         onPick={(v) => pick('hifz', v)}
         opts={H}
+        onEditAmount={() => editAmount('hifz')}
         badge={
           row.rolledToNext > 0 ? (
             <span className="rounded bg-rose-100 px-1.5 text-[10px] font-bold text-rose-700">↩ {amountLabel(row.rolledToNext)} ينزاح لغد — بدون دمج</span>
@@ -169,6 +174,7 @@ function DayRow({ row, student, onStatus }) {
         dueTxt="لا شيء مستحق"
         onPick={(v) => pick('minor', v)}
         opts={R}
+        onEditAmount={() => editAmount('minor')}
         badge={
           row.minor && row.minor.plannedQ > 0 && !row.minor.status ? (
             <span className="rounded bg-sky-100 px-1.5 text-[10px] font-bold text-sky-700">
@@ -191,6 +197,7 @@ function DayRow({ row, student, onStatus }) {
           dueTxt="—"
           onPick={(v) => pick('major', v)}
           opts={R}
+          onEditAmount={() => editAmount('major')}
           badge={row.major && row.major.cycle > 1 ? <span className="rounded bg-violet-100 px-1.5 text-[10px] font-bold text-violet-800">الدورة {arNum(row.major.cycle)}</span> : null}
         />
       ) : null}
@@ -198,10 +205,12 @@ function DayRow({ row, student, onStatus }) {
   );
 }
 
-export default function StudentPlan({ student, settings, onStatus, onClear, onEdit }) {
+export default function StudentPlan({ student, settings, onStatus, onClear, onEdit, onAmountOverride }) {
   const plan = useMemo(() => buildPlan(student, settings), [student, settings]);
   const { rows, stats, totalQ, savedQ, range } = plan;
   const [edit, setEdit] = useState(null);
+  const [amountEdit, setAmountEdit] = useState(null);
+  const [custom, setCustom] = useState({ surah: '114', from: '1', toSurah: '114', to: '6' });
 
   const weeks = useMemo(() => {
     const m = [];
@@ -313,7 +322,7 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
               const dayRows = w.rows.filter((r) => r.type === 'day');
               const s = { saved: 0, missed: 0, absent: 0 };
               dayRows.forEach((r) => r.status && s[r.status]++);
-              return <FragmentWeek key={w.key} n={wi + 1} w={w} s={s} dayRows={dayRows} onStatus={onStatus} student={student} cols={cols} />;
+              return <FragmentWeek key={w.key} n={wi + 1} w={w} s={s} dayRows={dayRows} onStatus={onStatus} onEditAmount={(row, stream) => setAmountEdit({ row, stream })} student={student} cols={cols} />;
             })}
           </tbody>
           <tfoot>
@@ -335,11 +344,26 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
           إعادة تعيين الحالات
         </button>
       </div>
+      {amountEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-sm rounded-xl bg-white p-4 shadow-2xl" dir="rtl">
+            <div className="mb-3 flex items-center justify-between"><h4 className="font-extrabold">تعديل مقدار {amountEdit.stream === 'hifz' ? 'الحفظ' : amountEdit.stream === 'minor' ? 'المراجعة الصغرى' : 'المراجعة الكبرى'}</h4><button onClick={() => setAmountEdit(null)} className="text-xl text-slate-400">×</button></div>
+            <p className="mb-2 text-xs text-slate-500">سيُعاد توليد الأيام التالية بقدر الطالب الأصلي: {amountLabel(Math.round((student.dailyHifz || .25) * QPP))}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {AMOUNT_OPTS.filter((o) => o.v !== .75 || true).map((o) => <button key={o.v} onClick={() => {
+                const r = amountEdit.row; const end = r.qHi; const start = r.direction === 'desc' ? Math.max(0, end - Math.round(o.v * QPP)) : r.qLo; const span = r.direction === 'desc' ? { qLo: start, qHi: end } : { qLo: start, qHi: Math.min(2416, start + Math.round(o.v * QPP)) };
+                onAmountOverride(amountEdit.row.date, amountEdit.stream, span); setAmountEdit(null);
+              }} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold hover:bg-emerald-50">{o.label}</button>)}
+            </div>
+            <div className="mt-4 border-t pt-3"><div className="mb-2 text-xs font-bold text-slate-500">مخصص من آية إلى آية</div><div className="grid grid-cols-2 gap-2"><input value={custom.surah} onChange={(e) => setCustom({ ...custom, surah: e.target.value })} placeholder="السورة (رقم)" className="rounded border p-2 text-sm" /><input value={custom.from} onChange={(e) => setCustom({ ...custom, from: e.target.value })} placeholder="من آية" className="rounded border p-2 text-sm" /><input value={custom.toSurah} onChange={(e) => setCustom({ ...custom, toSurah: e.target.value })} placeholder="إلى سورة" className="rounded border p-2 text-sm" /><input value={custom.to} onChange={(e) => setCustom({ ...custom, to: e.target.value })} placeholder="إلى آية" className="rounded border p-2 text-sm" /></div><button onClick={() => { const s = ayahRangeQ(custom.surah, custom.from, custom.toSurah, custom.to); if (s) { onAmountOverride(amountEdit.row.date, amountEdit.stream, s); setAmountEdit(null); } }} className="mt-2 w-full rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white">حفظ المقدار المخصص</button></div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
 
-function FragmentWeek({ n, w, s, dayRows, student, cols, onStatus }) {
+function FragmentWeek({ n, w, s, dayRows, student, cols, onStatus, onEditAmount }) {
   const fr = w.rows[0],
     lr = w.rows[w.rows.length - 1];
   const range = !fr ? '' : fr.date === lr.date ? hijriInfo(fr.date).dm : `${hijriInfo(fr.date).dm} ← ${hijriInfo(lr.date).dm}`;
@@ -358,7 +382,7 @@ function FragmentWeek({ n, w, s, dayRows, student, cols, onStatus }) {
             </td>
           </tr>
         ) : (
-          <DayRow key={r.date} row={r} student={student} onStatus={onStatus} />
+          <DayRow key={r.date} row={r} student={student} onStatus={onStatus} onEditAmount={onEditAmount} />
         )
       )}
       <tr className="bg-slate-100 text-[12px] font-extrabold">
