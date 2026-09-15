@@ -105,7 +105,25 @@ export default function Home() {
     []
   );
   const clearStatuses = useCallback(
-    (sid) => setDb((s) => ({ ...s, students: s.students.map((st) => (st.id === sid ? { ...st, statuses: {} } : st)) })),
+    (sid) => setDb((s) => ({ ...s, students: s.students.map((st) => (st.id === sid ? { ...st, statuses: {}, overrides: {} } : st)) })),
+    []
+  );
+  const setAmountOverride = useCallback(
+    (sid, date, stream, span) => setDb((s) => ({
+      ...s,
+      students: s.students.map((st) => {
+        if (st.id !== sid) return st;
+        const overrides = { ...(st.overrides || {}) };
+        const statuses = { ...(st.statuses || {}) };
+        overrides[date] = { ...(overrides[date] || {}), [stream]: span };
+        // Editing a day invalidates every later generated day. Clear marks and
+        // manual edits after it; the planner then regenerates them from the
+        // original dailyHifz setting.
+        Object.keys(statuses).forEach((d) => { if (d > date) delete statuses[d]; });
+        Object.keys(overrides).forEach((d) => { if (d > date) delete overrides[d]; });
+        return { ...st, statuses, overrides };
+      }),
+    })),
     []
   );
 
@@ -146,7 +164,7 @@ export default function Home() {
         ) : (
           <>
             <StudentTabs students={db.students} activeId={active?.id} onPick={(id) => setDb((s) => ({ ...s, activeId: id }))} onRemove={removeStudent} />
-            {active && <StudentPlan student={active} settings={db.settings} onStatus={(date, stream, st) => setStatus(active.id, date, stream, st)} onClear={clearStatuses} />}
+            {active && <StudentPlan student={active} settings={db.settings} onStatus={(date, stream, st) => setStatus(active.id, date, stream, st)} onAmountOverride={(date, stream, span) => setAmountOverride(active.id, date, stream, span)} onClear={clearStatuses} />}
           </>
         )}
 
