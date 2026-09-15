@@ -28,6 +28,7 @@ jobs:
       - name: Build (root + fresh-path twin for cache-busting)
         run: |
           export NEXT_PUBLIC_BUILD="$(date -u +%y%m%d-%H%M) Pages"
+          rm -rf out-root out-v3
           npm run build && cp -a out out-root
           NEXT_BASE=/halqati-app/v3 NEXT_PUBLIC_BUILD="$NEXT_PUBLIC_BUILD ·v3" npm run build && cp -a out out-v3
           rm -rf out && cp -a out-root out && cp -a out-v3 out/v3

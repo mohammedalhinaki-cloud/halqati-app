@@ -5,3 +5,6 @@ build/
 .env*
 *.log
 .DS_Store
+
+out-root/
+out-v3/
