@@ -82,14 +82,19 @@ export default function Home() {
     []
   );
   const setStatus = useCallback(
-    (sid, date, status) =>
+    (sid, date, stream, status) =>
       setDb((s) => ({
         ...s,
         students: s.students.map((st) => {
           if (st.id !== sid) return st;
           const statuses = { ...st.statuses };
-          if (status) statuses[date] = status;
-          else delete statuses[date];
+          let cur = statuses[date];
+          if (typeof cur === 'string') cur = { hifz: cur }; // migrate legacy shape on write
+          cur = { ...(cur || {}) };
+          if (status) cur[stream] = status;
+          else delete cur[stream];
+          if (Object.keys(cur).length === 0) delete statuses[date];
+          else statuses[date] = cur;
           return { ...st, statuses };
         }),
       })),
@@ -137,7 +142,7 @@ export default function Home() {
         ) : (
           <>
             <StudentTabs students={db.students} activeId={active?.id} onPick={(id) => setDb((s) => ({ ...s, activeId: id }))} onRemove={removeStudent} />
-            {active && <StudentPlan student={active} settings={db.settings} onStatus={(date, st) => setStatus(active.id, date, st)} onClear={clearStatuses} />}
+            {active && <StudentPlan student={active} settings={db.settings} onStatus={(date, stream, st) => setStatus(active.id, date, stream, st)} onClear={clearStatuses} />}
           </>
         )}
 

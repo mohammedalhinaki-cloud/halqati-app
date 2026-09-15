@@ -38,39 +38,50 @@ p = buildPlan({ ...base, statuses: { '2026-09-21': 'missed' } }, settings);
 days = p.rows.filter((r) => r.type === 'day');
 assert.equal(days[1].status, 'missed');
 assert.equal(days[1].plannedQ, 0, 'missed day saves nothing');
-assert.equal(days[2].amountQ, 4, '22nd = base 2 + carry 2');
-assert.equal(days[2].carryIn, 2);
-assert.equal(days[2].fromQ, 2008, 'missed day does not advance the mushaf cursor');
-ok('missed day → 0 saved, full amount moved to next working day');
+assert.equal(days[1].qHi, null, 'missed day has no content (red, shifted)');
+assert.equal(days[2].amountQ, 2, 'next day keeps EXACTLY its daily dose — no merge, no burdening');
+assert.equal(days[2].qLo, 2008, '22nd = slot1 = Monday content (Sunday missed -> Monday content on Tuesday...); 21st stays red-empty');
+assert.ok(days[2].amountQ === 2, 'dose stays exactly base 2');
+assert.equal(days[2].shiftedBy, 1, 'one miss before this day — plan shifted by one');
+assert.equal(days[1].shiftBefore, 0, 'the missed day itself had no shift before it');
+assert.equal(days[1].shiftedBy, 1, 'after it, the plan carries one permanent day of delay');
+assert.equal(days[0].qLo, 2006, 'day 1 starts at range start');
+assert.equal(days[1].qLo, null, 'missed day shows NO content (kept red/shifted)');
+assert.equal(days[3].qLo, 2010, 'following days each shifted by exactly one slot — the whole plan slides');
+assert.equal(days[4].qLo, 2012, 'delay persists forever, never merged');
+ok('missed day → red + full one-day slide (SHIFT, never merge)');
 
-/* 5. double cascade: 21 missed + 22 absent -> 27 gets 6 (1.5 faces), saved counts */
+/* 5. shift semantics: two misses slide the plan 2 days; saving consumes queue-first */
 p = buildPlan({ ...base, statuses: { '2026-09-21': 'missed', '2026-09-22': 'absent', '2026-09-27': 'saved' } }, settings);
 days = p.rows.filter((r) => r.type === 'day');
-assert.equal(days[3].amountQ, 6, 'absent+missed stack: 2+2+2');
-assert.equal(days[3].carryIn, 4);
-assert.equal(days[3].fromQ, 2008);
-assert.equal(days[3].toQ, 2014);
-assert.equal(p.savedQ, 6);
-assert.equal(days[4].fromQ, 2014, 'after a saved catch-up day, schedule resumes');
-assert.deepEqual([p.stats.saved, p.stats.missed, p.stats.absent, p.stats.pending], [1, 1, 1, 4]);
-ok('cascade stacks across multiple days; saved resumes cursor; stats correct');
+assert.equal(days[3].amountQ, 2, 'daily dose is constant even with 2 days queued');
+assert.equal(days[3].qLo, 2008, '27th = slot (3-1) = the content the 22nd was to receive (21 missed -> +1)');
+assert.equal(days[3].qHi, 2010);
+assert.equal(p.savedQ, 2, 'only the marked save counts in progress');
+assert.equal(days[4].qLo, 2010, 'plan resumes right after');
+assert.deepEqual([p.stats.saved, p.stats.missed, p.stats.absent], [1, 1, 1]);
+ok('shift stacks across days (no merged mega-days); saved pulls from queue first');
 
-/* 6. overflow beyond plan end auto-extends */
+/* 6. beyond-plan extension only for real queues */
 p = buildPlan({ ...base, statuses: { '2026-09-20': 'missed', '2026-09-21': 'missed' } }, { ...settings, endDate: '2026-09-21' });
 days = p.rows.filter((r) => r.type === 'day');
-assert.equal(days.length, 3);
+assert.equal(days.length, 4, 'slide of 2 days -> exactly 2 extra working days (22, 23 Sep)');
 assert.equal(days[2].beyondPlan, true);
-assert.equal(days[2].amountQ, 6);
-assert.equal(days[2].fromQ, 2006);
-assert.equal(p.carryLeft, 0);
-ok('unfinished carry extends into new working days after plan end (22 Sep, 1.5 faces)');
+assert.equal(days[2].qLo, 2006, 'first extra day carries the first slid slot');
+assert.equal(p.carryLeft, 0, 'shift model never queues extra burden');
+assert.equal(p.remainingQ, 410 - 0, 'unmarked progress is 0 — the visible days are previews');
+p = buildPlan({ ...base, statuses: { '2026-09-20': 'missed', '2026-09-21': { hifz: 'saved' } } }, { ...settings, endDate: '2026-09-21' });
+assert.equal(p.savedQ, 2, 'saving on the shifted slot consumes the DEFERRED content (slot 0)');
+assert.equal(p.rows.filter((r) => r.type === 'day')[1].qLo, 2006, 'the 21st shows Sunday content');
+assert.equal(p.carryLeft, 0, 'nothing merges — the plan merely slid');
+ok('extension day at plan end; queue drains only via saves (no merge)');
 
 /* 7. range clamping: small surah range exhausts without overrun */
 p = buildPlan({ ...base, from: 112, to: 114 }, settings); // الاخلاص..الناس = 1 face
 const small = p.totalQ;
 days = p.rows.filter((r) => r.type === 'day');
 assert.equal(small, 4, 'Al-Ikhlas..An-Nas = 4 quarter-faces (1 page)');
-assert.ok(days.every((r) => r.fromQ >= 2412 && r.toQ <= 2416), 'cursor never leaves the range');
+assert.ok(days.every((r) => r.qLo == null || (r.qLo >= 2412 && r.qHi <= 2416)), 'cursor never leaves the range');
 assert.equal(days.filter((r) => r.empty).length, 5, 'days after the range is exhausted are empty');
 assert.equal(p.rows.filter((r) => r.beyondPlan).length, 0, 'no extension needed (carry consumed)');
 ok('range clamps: cursor pinned inside 2412..2416, surplus days marked empty');
@@ -149,17 +160,84 @@ ok('hijri.js: engine==Intl over 150 days + roundtrips + month lengths + labels')
   assert.equal(plan.totalQ, 3, 'two short surahs = 3 quarters per data');
   assert.equal(plan.range.faces, 0.75);
   const days = plan.rows.filter((r) => r.type === 'day');
-  assert.equal(days.length, 3, 'two plan days + one beyondPlan extension day (leftover carry)');
+  assert.equal(days.length, 2, 'daily doses 2+1 drain the 3-quarter range exactly — no bogus extension needed');
   assert.equal(days[0].qHi, 2416, 'reverse day1 ends at mushaf end');
   assert.equal(days[0].qLo, 2414);
-  assert.ok(days[0].toQ < days[0].fromQ, 'reverse rows move downward');
+  assert.equal(days[0].qLo, 2414); assert.equal(days[0].qHi, 2416); // display span normalized; direction lives in qLo/qHi order of travel (row.direction)
   assert.equal(days[1].qHi, 2414);
   assert.equal(days[1].qLo, 2413);
-  assert.equal(days[2].empty, true, 'extension day shows range complete');
+  assert.equal(days[1].amountQ, 1, 'last day shrinks to the remaining slice only');
   assert.equal(plan.savedQ, 3);
-  assert.equal(plan.carryLeft, 0);
+  assert.equal(plan.carryLeft, 0); // shift model: no queue burden
+  assert.equal(plan.savedQ, 3);
   assert.ok(spanLabel(days[0].qLo, days[0].qHi).surah !== '\u2014', 'span label resolves for reverse day');
 }
-ok('reverse-range: any two surahs, descending plan, mirrored engine verified');
+ok('reverse-range: any two surahs, descending plan, mirrored engine verified (direction field + normalized span)');
+
+
+/* 14. ASCENDING default (user-reported bug): from <= to must NEVER mirror */
+{
+  const se = { startDate: '2026-09-20', endDate: '2026-09-26', holidays: '' };
+  const p = buildPlan({ name: 'A', from: 1, to: 114, dailyHifz: 0.5, statuses: {} }, se);
+  const days = p.rows.filter((r) => r.type === 'day');
+  assert.equal(p.descending, false, '1 -> 114 is ascending');
+  assert.equal(days[0].qLo, 0, 'ascending day 1 starts at Al-Fatiha quarter 0');
+  assert.equal(spanLabel(days[0].qLo, days[0].qHi).surah, '\u0627\u0644\u0641\u0627\u062a\u062d\u0629', 'ascending day 1 = الفاتحة');
+  assert.ok(days.every((r) => r.qLo == null || r.qLo >= 0));
+  assert.ok(days[1].qLo >= days[0].qLo, 'ascending plan never goes backwards');
+  // equal from/to must stay forward too (no mirror)
+  const peq = buildPlan({ from: 114, to: 114, dailyHifz: 0.5, statuses: {} }, se);
+  assert.equal(peq.descending, false, 'from === to is NOT mirrored');
+  // NaN / invalid values default to ascending (never mirror)
+  const pbad = buildPlan({ from: undefined, to: undefined, dailyHifz: 0.5, statuses: {} }, se);
+  assert.equal(pbad.descending, false, 'invalid inputs default to ascending');
+  // legacy flat status strings still read as hifz marks
+  const pleg = buildPlan({ from: 1, to: 114, dailyHifz: 0.5, statuses: { '2026-09-20': 'saved' } }, se);
+  assert.equal(pleg.rows.filter((r) => r.type === 'day')[0].status, 'saved', 'legacy flat statuses compatible');
+  assert.equal(pleg.stats.saved, 1);
+}
+ok('ascending (from<=to) NEVER mirrors; legacy flat statuses compatible');
+
+/* 15. minor review = automatic feed from yesterday's saved hifz */
+{
+  const se = { startDate: '2026-09-20', endDate: '2026-09-23', holidays: '' };
+  const p = buildPlan({ from: 1, to: 114, dailyHifz: 0.5, statuses: { '2026-09-20': { hifz: 'saved' } } }, se);
+  const days = p.rows.filter((r) => r.type === 'day');
+  assert.ok(!days[0].minor || !days[0].minor.plannedQ, 'no minor before any save');
+  assert.equal(days[1].minor.plannedQ, 2, "day 2 minor = day 1's saved 2 quarters — automatic");
+  assert.equal(days[1].minor.status, 'done', 'minor is auto-satisfied (teacher never marks it)');
+  assert.deepEqual([days[1].minor.qLo, days[1].minor.qHi], [0, 2]);
+  assert.ok(!days[2].minor || days[2].minor.preview, 'day 3 has no real minor (nothing saved on day 2)');
+}
+ok('minor review auto-built from yesterday hifz (no manual entry)');
+
+/* 16. major = optional independent shift stream */
+{
+  const se = { startDate: '2026-09-20', endDate: '2026-09-29', holidays: '' };
+  const st = {
+    from: 1, to: 114, dailyHifz: 0.5, majorEnabled: true, majorBaseQ: 2,
+    statuses: {
+      '2026-09-20': { hifz: 'saved' },
+      '2026-09-21': { hifz: 'saved', major: 'missed' },
+      '2026-09-22': { hifz: 'saved', major: 'done' },
+      '2026-09-23': { hifz: 'saved', major: 'done' },
+    },
+  };
+  const p = buildPlan(st, se);
+  const days = p.rows.filter((r) => r.type === 'day');
+  assert.equal(days[2].major.status, 'done');
+  assert.equal(days[2].major.plannedQ, 2, 'after a major-miss, the due day processes the deferred slice (daily dose only)');
+  assert.equal(days[3].major.plannedQ, 2, 'each major day = own daily dose, never merged');
+  assert.equal(days[1].status, 'saved', 'hifz stream untouched by major marks');
+  assert.equal(p.stats.saved, 4, 'hifz saves independent of major');
+  assert.equal(p.stats.major.saved, 2);
+  assert.equal(p.stats.major.missed, 1);
+  assert.equal(p.savedQ, 8, 'hifz progress unaffected');
+  assert.equal(p.stats.major.savedQ, 4, 'major reviewed 1 face total');
+  // disabled major -> no major objects at all
+  const poff = buildPlan({ ...st, majorEnabled: false }, se);
+  assert.ok(poff.rows.filter((r) => r.type === 'day').every((r) => !r.major), 'major disabled -> absent from rows');
+}
+ok('major review: optional, independent shift, done/missed only touch itself');
 
 console.log(`\nALL ${n} PLAN/QURAN CHECKS PASSED`);
