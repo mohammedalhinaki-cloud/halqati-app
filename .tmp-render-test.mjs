@@ -925,17 +925,46 @@ function HijriDatePicker({ value, onChange, label }) {
 }
 
 // components/SettingsCard.jsx
-import { jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
+import { Fragment as Fragment2, jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
+var ISO = /^\d{4}-\d{2}-\d{2}$/;
+var parseList = (str) => String(str || "").split(/[,،\s]+/).filter((s) => ISO.test(s));
+function workingDaysBetween(a, b) {
+  const lo = a <= b ? a : b;
+  const hi = a <= b ? b : a;
+  const out = [];
+  const d = new Date(+lo.slice(0, 4), +lo.slice(5, 7) - 1, +lo.slice(8, 10));
+  const end = new Date(+hi.slice(0, 4), +hi.slice(5, 7) - 1, +hi.slice(8, 10));
+  let guard = 0;
+  while (d <= end && guard++ < 370) {
+    if (d.getDay() >= 0 && d.getDay() <= 3) {
+      out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
 function SettingsCard({ settings, onChange }) {
   const days = workingDayCount(settings);
+  const [mode, setMode] = useState3("single");
   const [holPick, setHolPick] = useState3("");
-  const holidays = settings.holidays.split(/[,،\s]+/).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s)).sort();
+  const [rangeFrom, setRangeFrom] = useState3("");
+  const [rangeTo, setRangeTo] = useState3("");
+  const holidays = parseList(settings.holidays).sort();
+  const setHolidays = (list) => onChange({ holidays: Array.from(new Set(list)).sort().join(", ") });
   const addHoliday = () => {
     if (!holPick || holidays.includes(holPick)) return;
-    onChange({ holidays: [...holidays, holPick].sort().join(", ") });
+    setHolidays([...holidays, holPick]);
     setHolPick("");
   };
-  const removeHoliday = (d) => onChange({ holidays: holidays.filter((x) => x !== d).join(", ") });
+  const addRange = () => {
+    if (!rangeFrom || !rangeTo) return;
+    const expanded = workingDaysBetween(rangeFrom, rangeTo);
+    if (!expanded.length) return;
+    setHolidays([...holidays, ...expanded]);
+    setRangeFrom("");
+    setRangeTo("");
+  };
+  const removeHoliday = (d) => setHolidays(holidays.filter((x) => x !== d));
   return /* @__PURE__ */ jsxs3("section", { className: "card p-4", "aria-label": "\u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A \u0627\u0644\u0639\u0627\u0645\u0629", children: [
     /* @__PURE__ */ jsxs3("div", { className: "mb-3 flex items-center justify-between", children: [
       /* @__PURE__ */ jsxs3("h2", { className: "text-base font-extrabold text-slate-900", children: [
@@ -948,8 +977,30 @@ function SettingsCard({ settings, onChange }) {
       /* @__PURE__ */ jsx3(HijriDatePicker, { label: "\u062A\u0627\u0631\u064A\u062E \u0628\u062F\u0627\u064A\u0629 \u0627\u0644\u062E\u0637\u0629 (\u0647\u062C\u0631\u064A)", value: settings.startDate, onChange: (v) => onChange({ startDate: v }) }),
       /* @__PURE__ */ jsx3(HijriDatePicker, { label: "\u062A\u0627\u0631\u064A\u062E \u0646\u0647\u0627\u064A\u0629 \u0627\u0644\u062E\u0637\u0629 (\u0647\u062C\u0631\u064A)", value: settings.endDate, onChange: (v) => onChange({ endDate: v }) }),
       /* @__PURE__ */ jsxs3("div", { children: [
-        /* @__PURE__ */ jsx3("span", { className: "field-label", children: "\u0625\u0636\u0627\u0641\u0629 \u064A\u0648\u0645 \u0625\u062C\u0627\u0632\u0629 (\u064A\u064F\u062A\u062E\u0637\u0649 \u062A\u0644\u0642\u0627\u0626\u064A\u064B\u0627)" }),
-        /* @__PURE__ */ jsxs3("div", { className: "flex gap-2", children: [
+        /* @__PURE__ */ jsxs3("div", { className: "mb-1 flex items-center justify-between gap-2", children: [
+          /* @__PURE__ */ jsx3("span", { className: "field-label mb-0", children: "\u0625\u0636\u0627\u0641\u0629 \u0625\u062C\u0627\u0632\u0629 (\u064A\u064F\u062A\u062E\u0637\u0649 \u062A\u0644\u0642\u0627\u0626\u064A\u064B\u0627)" }),
+          /* @__PURE__ */ jsxs3("div", { className: "inline-flex overflow-hidden rounded-lg border border-slate-300 text-[11px] font-bold no-print", children: [
+            /* @__PURE__ */ jsx3(
+              "button",
+              {
+                type: "button",
+                onClick: () => setMode("single"),
+                className: "px-2 py-0.5 " + (mode === "single" ? "bg-slate-800 text-white" : "bg-white text-slate-500 hover:bg-slate-100"),
+                children: "\u064A\u0648\u0645 \u0645\u0641\u0631\u062F"
+              }
+            ),
+            /* @__PURE__ */ jsx3(
+              "button",
+              {
+                type: "button",
+                onClick: () => setMode("range"),
+                className: "px-2 py-0.5 " + (mode === "range" ? "bg-slate-800 text-white" : "bg-white text-slate-500 hover:bg-slate-100"),
+                children: "\u0641\u062A\u0631\u0629 \u0643\u0627\u0645\u0644\u0629"
+              }
+            )
+          ] })
+        ] }),
+        mode === "single" ? /* @__PURE__ */ jsxs3("div", { className: "flex gap-2", children: [
           /* @__PURE__ */ jsx3("div", { className: "flex-1", children: /* @__PURE__ */ jsx3(HijriDatePicker, { value: holPick, onChange: setHolPick }) }),
           /* @__PURE__ */ jsx3(
             "button",
@@ -961,17 +1012,37 @@ function SettingsCard({ settings, onChange }) {
               children: "\uFF0B \u0625\u062C\u0627\u0632\u0629"
             }
           )
+        ] }) : /* @__PURE__ */ jsxs3("div", { className: "flex flex-col gap-1.5", children: [
+          /* @__PURE__ */ jsxs3("div", { className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ jsx3("div", { className: "flex-1", children: /* @__PURE__ */ jsx3(HijriDatePicker, { label: "\u0645\u0646 \u064A\u0648\u0645", value: rangeFrom, onChange: setRangeFrom }) }),
+            /* @__PURE__ */ jsx3("span", { className: "mt-4 text-slate-400", children: "\u2190" }),
+            /* @__PURE__ */ jsx3("div", { className: "flex-1", children: /* @__PURE__ */ jsx3(HijriDatePicker, { label: "\u0625\u0644\u0649 \u064A\u0648\u0645", value: rangeTo, onChange: setRangeTo }) })
+          ] }),
+          /* @__PURE__ */ jsx3(
+            "button",
+            {
+              type: "button",
+              onClick: addRange,
+              disabled: !rangeFrom || !rangeTo,
+              className: "btn bg-slate-800 text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 no-print",
+              children: "\uFF0B \u0625\u0636\u0627\u0641\u0629 \u0627\u0644\u0641\u062A\u0631\u0629 \u0643\u0644\u0647\u0627"
+            }
+          ),
+          /* @__PURE__ */ jsx3("p", { className: "text-[10px] leading-4 text-slate-400", children: "\u062A\u0636\u0627\u0641 \u0623\u064A\u0627\u0645 \u0627\u0644\u0639\u0645\u0644 (\u0627\u0644\u0623\u062D\u062F\u2013\u0627\u0644\u0623\u0631\u0628\u0639\u0627\u0621) \u0627\u0644\u0648\u0627\u0642\u0639\u0629 \u062F\u0627\u062E\u0644 \u0627\u0644\u0641\u062A\u0631\u0629 \u0641\u0642\u0637\u061B \u062E\u0645\u064A\u0633/\u062C\u0645\u0639\u0629/\u0633\u0628\u062A \u0644\u0627 \u062A\u064F\u062E\u0632\u064E\u0651\u0646 \u0644\u0623\u0646\u0647\u0627 \u0628\u0644\u0627 \u062D\u0641\u0638 \u0623\u0635\u0644\u064B\u0627." })
         ] })
       ] })
     ] }),
     /* @__PURE__ */ jsxs3("div", { className: "mt-2 flex flex-wrap items-center gap-1.5 text-xs", children: [
-      holidays.length === 0 ? /* @__PURE__ */ jsx3("span", { className: "text-slate-400", children: "\u0644\u0627 \u062A\u0648\u062C\u062F \u0625\u062C\u0627\u0632\u0627\u062A \u0645\u062D\u062F\u062F\u0629 \u2014 \u0623\u0636\u0641\u0647\u0627 \u0645\u0646 \u0627\u0644\u0645\u0646\u062A\u0642\u064A \u0623\u0639\u0644\u0627\u0647 \u0625\u0646 \u0648\u062C\u062F\u062A." }) : holidays.map((h2) => /* @__PURE__ */ jsxs3("span", { className: "inline-flex items-center gap-1 rounded-full bg-slate-800 py-0.5 pe-1 ps-2.5 text-[11px] font-bold text-white", children: [
-        "\u263E ",
-        weekdayName(h2),
-        " \xB7 ",
-        hijriInfo(h2).dm,
-        /* @__PURE__ */ jsx3("button", { type: "button", onClick: () => removeHoliday(h2), className: "rounded-full px-1.5 text-slate-300 hover:bg-rose-600 hover:text-white no-print", title: "\u062D\u0630\u0641", children: "\u2715" })
-      ] }, h2)),
+      holidays.length === 0 ? /* @__PURE__ */ jsx3("span", { className: "text-slate-400", children: "\u0644\u0627 \u062A\u0648\u062C\u062F \u0625\u062C\u0627\u0632\u0627\u062A \u0645\u062D\u062F\u062F\u0629 \u2014 \u0623\u0636\u0641 \u064A\u0648\u0645\u064B\u0627 \u0623\u0648 \u0641\u062A\u0631\u0629 \u0645\u0646 \u0627\u0644\u0645\u0646\u062A\u0642\u064A \u0623\u0639\u0644\u0627\u0647 \u0625\u0646 \u0648\u062C\u062F\u062A." }) : /* @__PURE__ */ jsxs3(Fragment2, { children: [
+        /* @__PURE__ */ jsx3("span", { className: "rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-extrabold text-slate-600", children: holidays.length > 1 ? `\u0645\u0646 ${hijriInfo(holidays[0]).dm} \u0625\u0644\u0649 ${hijriInfo(holidays[holidays.length - 1]).dm} \u2014 ${arNum(holidays.length)} \u064A\u0648\u0645` : "\u064A\u0648\u0645 \u0648\u0627\u062D\u062F" }),
+        holidays.map((h2) => /* @__PURE__ */ jsxs3("span", { className: "inline-flex items-center gap-1 rounded-full bg-slate-800 py-0.5 pe-1 ps-2.5 text-[11px] font-bold text-white", children: [
+          "\u263E ",
+          weekdayName(h2),
+          " \xB7 ",
+          hijriInfo(h2).dm,
+          /* @__PURE__ */ jsx3("button", { type: "button", onClick: () => removeHoliday(h2), className: "rounded-full px-1.5 text-slate-300 hover:bg-rose-600 hover:text-white no-print", title: "\u062D\u0630\u0641", children: "\u2715" })
+        ] }, h2))
+      ] }),
       /* @__PURE__ */ jsxs3("span", { className: "ms-1 text-slate-500", children: [
         "\u0623\u064A\u0627\u0645 \u0627\u0644\u062F\u0631\u0627\u0633\u0629: ",
         /* @__PURE__ */ jsx3("b", { className: "text-slate-800", children: arNum(days) }),
