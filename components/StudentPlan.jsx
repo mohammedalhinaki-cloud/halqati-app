@@ -164,12 +164,20 @@ function DayRow({ row, student, onStatus }) {
         span={row.minor ? { qLo: row.minor.qLo, qHi: row.minor.qHi } : null}
         status={row.minor && row.minor.status}
         amount={row.minor && row.minor.plannedQ}
-        preview={row.minor && row.minor.preview}
         style={REV_STYLE}
         deferred="انزاحت للصباح القادم"
         dueTxt="لا شيء مستحق"
         onPick={(v) => pick('minor', v)}
         opts={R}
+        badge={
+          row.minor && row.minor.plannedQ > 0 && !row.minor.status ? (
+            <span className="rounded bg-sky-100 px-1.5 text-[10px] font-bold text-sky-700">
+              من حفظ الأمس — تحتاج تعليم «تم»{row.minor.pendingDays > 1 ? ` · متأخرة ${arNum(row.minor.pendingDays)} يوم` : ''}
+            </span>
+          ) : row.minor && row.minor.pendingDays > 1 && row.minor.status !== 'done' ? (
+            <span className="rounded bg-amber-100 px-1.5 text-[10px] font-bold text-amber-800">متأخرة {arNum(row.minor.pendingDays)} يوم</span>
+          ) : null
+        }
       />
       {student.majorEnabled ? (
         <MarkCell
@@ -225,7 +233,7 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
               ☎ {student.phone}
             </span>
             <span className={'rounded-full px-2 py-0.5 ' + dirChip.cls}>{dirChip.txt}</span>
-            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700">صغرى: من حفظ الأمس — تحتاج تعليم «تم»</span>
+            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700">صغرى: من طابور حفظ الأمس فقط — أول يوم فارغ، ولا تُعلَّم تلقائيًا</span>
             {student.majorEnabled ? (
               <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">
                 كبرى: تلقائية من الناس ← الفاتحة
@@ -319,7 +327,7 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
       </div>
 
       <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-        <span>كل سجل مستقل: «لم يحفظ/لم تتم/غائب» يبقي يومه أحمر ويؤجّله يومًا كاملًا — الخطة تنزاح ولا تُدمج. الصغرى تُحسب تلقائيًا من حفظ الأمس.</span>
+        <span>كل سجل مستقل: «لم يحفظ/لم تتم/غائب» يبقي يومه أحمر ويؤجّله يومًا كاملًا — الخطة تنزاح ولا تُدمج. الصغرى تُغذَّى من حفظ الأمس فقط: لا شيء في أول يوم، وتبقى معلّقة حتى تعلّمها «تم».</span>
         <button
           onClick={() => confirm('مسح كل حالات الأيام لهذا الطالب؟') && onClear(student.id)}
           className="btn border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 no-print"

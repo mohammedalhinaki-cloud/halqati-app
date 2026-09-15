@@ -203,7 +203,7 @@ ok('reverse-range: any two surahs, descending plan, mirrored engine verified (di
 }
 ok('ascending (from<=to) NEVER mirrors; legacy flat statuses compatible');
 
-/* 15. minor: frozen until the teacher marks it — NO auto-estimate; slides on «لم تتم» */
+/* 15. minor: queue of REAL saves only (empty first day), frozen until the teacher marks it — NO auto-estimate; slides on «لم تتم» */
 {
   const se = { startDate: '2026-09-20', endDate: '2026-09-23', holidays: '' };
   const F = (o) => o && o.qLo != null ? [o.qLo, o.qHi] : null;
@@ -211,6 +211,8 @@ ok('ascending (from<=to) NEVER mirrors; legacy flat statuses compatible');
   let p = buildPlan({ from: 1, to: 114, dailyHifz: 0.5, statuses: { '2026-09-20': { hifz: 'saved' } } }, se);
   let days = p.rows.filter((r) => r.type === 'day');
   assert.equal(days[0].minor.status, null, 'day 1 minor NOT auto-marked');
+  assert.equal(days[0].minor.plannedQ, 0, 'FIRST plan day has no minor: nothing was saved yesterday');
+  assert.equal(days[0].minor.qLo, null, 'first day minor shows nothing (no mirror of today hifz)');
   assert.equal(days[1].minor.status, null, 'unmarked minor never becomes تم by itself');
   assert.equal(days[1].minor.plannedQ, 2, 'the queued slice is shown for marking');
   // marking «تم» records it
@@ -220,7 +222,8 @@ ok('ascending (from<=to) NEVER mirrors; legacy flat statuses compatible');
   // hifz saved on d1, NOT marked minor there -> next day re-runs the SAME slot (frozen), not doubled
   p = buildPlan({ from: 1, to: 114, dailyHifz: 0.5, statuses: { '2026-09-20': { hifz: 'saved' }, '2026-09-21': { hifz: 'saved' } } }, se);
   days = p.rows.filter((r) => r.type === 'day');
-  assert.deepEqual(F(days[1].minor), F(days[0].minor), 'unmarked minor holds its slot (no auto advance)');
+  assert.deepEqual(F(days[1].minor), [0, 2], 'day 2 minor = day 1 saved slice (matures next day)');
+  assert.deepEqual(F(days[2].minor), F(days[1].minor), 'unmarked minor holds its slot (no auto advance, no doubling)');
   // «لم تتم» burns the slot: it slides one day, hifz untouched
   p = buildPlan({
     from: 1, to: 114, dailyHifz: 0.5,
