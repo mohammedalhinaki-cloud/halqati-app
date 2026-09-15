@@ -45,7 +45,6 @@ export default function AddStudentForm({ onAdd }) {
     e.preventDefault();
     if (!f.name.trim()) return setErr('اسم الطالب مطلوب');
     if (!/^05\d{8}$/.test(f.phone.trim())) return setErr('رقم الجوال يبدأ بـ 05 ومكوّن من 10 أرقام');
-    if (Number(f.from) > Number(f.to)) return setErr('سورة البداية يجب أن تسبق سورة النهاية');
     setErr('');
     onAdd(newStudent(f));
     setF((s) => ({ ...s, name: '', phone: '' }));

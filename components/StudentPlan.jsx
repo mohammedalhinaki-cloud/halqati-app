@@ -28,8 +28,7 @@ function Stat({ label, value, cls }) {
 
 function DayRow({ row, onStatus }) {
   const hj = hijriInfo(row.date);
-  const b = row.toQ > row.fromQ ? row.toQ : row.fromQ + row.amountQ;
-  const lbl = spanLabel(row.fromQ, b);
+  const lbl = spanLabel(row.qLo ?? Math.min(row.fromQ, row.toQ), row.qHi ?? Math.max(row.fromQ, row.toQ));
   const st = row.status ? STATUS_STYLE[row.status] : null;
   const pick = (v) => onStatus(row.date, row.status === v ? null : v);
   return (

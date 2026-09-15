@@ -137,4 +137,29 @@ ok('hijri labels (Umm al-Qura) + invalid-date guard');
 }
 ok('hijri.js: engine==Intl over 150 days + roundtrips + month lengths + labels');
 
+/* 13. Descending range (no mushaf-order enforcement): mirrored engine + real display bounds */
+{
+  const st = {
+    from: 114, // الناس        [2414..2416)
+    to: 113, // الفلق         [2413..2414)
+    dailyHifz: 0.5,
+    statuses: { '2026-09-20': 'saved', '2026-09-21': 'saved' },
+  };
+  const plan = buildPlan(st, { startDate: '2026-09-20', endDate: '2026-09-21', holidays: '' });
+  assert.equal(plan.totalQ, 3, 'two short surahs = 3 quarters per data');
+  assert.equal(plan.range.faces, 0.75);
+  const days = plan.rows.filter((r) => r.type === 'day');
+  assert.equal(days.length, 3, 'two plan days + one beyondPlan extension day (leftover carry)');
+  assert.equal(days[0].qHi, 2416, 'reverse day1 ends at mushaf end');
+  assert.equal(days[0].qLo, 2414);
+  assert.ok(days[0].toQ < days[0].fromQ, 'reverse rows move downward');
+  assert.equal(days[1].qHi, 2414);
+  assert.equal(days[1].qLo, 2413);
+  assert.equal(days[2].empty, true, 'extension day shows range complete');
+  assert.equal(plan.savedQ, 3);
+  assert.equal(plan.carryLeft, 0);
+  assert.ok(spanLabel(days[0].qLo, days[0].qHi).surah !== '\u2014', 'span label resolves for reverse day');
+}
+ok('reverse-range: any two surahs, descending plan, mirrored engine verified');
+
 console.log(`\nALL ${n} PLAN/QURAN CHECKS PASSED`);
