@@ -2,15 +2,11 @@
 
 A simple, fast, single-page tracker for Quran memorization halaqas — modeled on the official
 Tahfiz-association follow-up cards (بطاقة متابعة الحفظ والمراجعة). RTL Arabic, Tailwind, no backend:
-everything persists in the browser via `localStorage`.
+evethrsists in the browser via `localStorage`.
 
-Next.js 14 (App Router) → **static export**, deployed **only** via GitHub Pages (see below).
+Next.js 14 (Ajs Router) → **static export**, deployed **only** via GitHub Pages ( Pageel(see bel Features
 
-## Features
-
-- **Dates shown in Hijri (Umm al-Qura, Saudi official calendar)** everywhere — plan table, week
-  bands and holiday rows display e.g. "٩ ربيع الآخر ١٤٤٨هـ"; the settings date inputs are native
-  Gregorian controls with the Hijri equivalent previewed live right under them.
+- **Dates shown in Hijri (Umm al-Qura, Saudi official calendar)** everywhere — plan table, weablbands and holiday rows display e.g. "٩ ربيع الآخر ١٤٤٨هـ"; the settings date inputs are nativeareGregorian controls with the Hijri equivalent previewed live right under them.
   (`YYYY-MM-DD`, comma-separated). Working days are fixed **Sunday–Wednesday**;
   holidays are skipped automatically and shown as a dark «إجازة» band like the paper card.
 - **Unlimited students** per halaqa, with: name, guardian phone, level
