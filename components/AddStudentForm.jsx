@@ -37,13 +37,6 @@ export default function AddStudentForm({ onAdd }) {
     majorEnabled: false,
     majorFaces: 0.5,
   });
-  const MAJOR_OPTS = [
-    { v: 0.25, label: 'ربع وجه' },
-    { v: 0.5, label: 'نصف وجه' },
-    { v: 0.75, label: 'ثلاثة أرباع وجه' },
-    { v: 1, label: 'وجه' },
-    { v: 1.5, label: 'وجه ونصف' },
-  ];
   const [err, setErr] = useState('');
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
   const setLevel = (lv) => setF((s) => ({ ...s, level: lv, dailyHifz: LEVELS[lv].faces }));
@@ -51,7 +44,8 @@ export default function AddStudentForm({ onAdd }) {
   const submit = (e) => {
     e.preventDefault();
     if (!f.name.trim()) return setErr('اسم الطالب مطلوب');
-    if (!/^05\d{8}$/.test(f.phone.trim())) return setErr('رقم الجوال يبدأ بـ 05 ومكوّن من 10 أرقام');
+    const ph = f.phone.trim();
+    if (ph && !/^05\d{8}$/.test(ph)) return setErr('إذا أدخلته: رقم جوال يبدأ بـ 05 ومكوّن من 10 أرقام');
     setErr('');
     onAdd(newStudent(f));
     setF((s) => ({ ...s, name: '', phone: '' }));
@@ -66,8 +60,8 @@ export default function AddStudentForm({ onAdd }) {
           <input className="field" value={f.name} onChange={(e) => set('name')(e.target.value)} placeholder="الاسم الكامل" />
         </label>
         <label>
-          <span className="field-label">جوال ولي الأمر *</span>
-          <input className="field" dir="ltr" value={f.phone} onChange={(e) => set('phone')(e.target.value)} placeholder="05xxxxxxxx" inputMode="numeric" />
+          <span className="field-label">جوال ولي الأمر (اختياري)</span>
+          <input className="field" dir="ltr" value={f.phone} onChange={(e) => set('phone')(e.target.value)} placeholder="اختياري — 05xxxxxxxx" inputMode="numeric" />
         </label>
         <label>
           <span className="field-label">المستوى</span>
@@ -114,10 +108,12 @@ export default function AddStudentForm({ onAdd }) {
               تفعيل المراجعة الكبرى
             </span>
           </label>
-          <label className={f.majorEnabled ? '' : 'pointer-events-none opacity-40'}>
-            <span className="field-label">مقدار الكبرى يوميًا</span>
-            {sel(MAJOR_OPTS, f.majorFaces, (v) => setF((s) => ({ ...s, majorFaces: Number(v) })))}
-          </label>
+          <div className={f.majorEnabled ? '' : 'opacity-40'}>
+            <span className="field-label">نظام الكبرى</span>
+            <p className="mt-1 rounded-md bg-violet-50 px-2 py-1 text-[12px] font-bold text-violet-800">
+              ⟲ تلقائية تنازلية: تبدأ من سورة الناس وتراجع وجهًا (مثل ورد الحفظ) كل يوم حتى الفاتحة، ثم تعيد الدورة من الناس
+            </p>
+          </div>
         </div>
         <div className="sm:col-span-2 lg:col-span-4 flex items-center justify-between">
           <span className="text-xs text-rose-600 font-bold">{err}</span>

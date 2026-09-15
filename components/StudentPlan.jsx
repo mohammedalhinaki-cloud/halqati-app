@@ -160,7 +160,7 @@ function DayRow({ row, student, onStatus }) {
         }
       />
       <MarkCell
-        label="مراجعة صغرى (تلقائية)"
+        label="مراجعة صغرى (من حفظ الأمس)"
         span={row.minor ? { qLo: row.minor.qLo, qHi: row.minor.qHi } : null}
         status={row.minor && row.minor.status}
         amount={row.minor && row.minor.plannedQ}
@@ -180,10 +180,10 @@ function DayRow({ row, student, onStatus }) {
           preview={row.major && row.major.preview}
           style={REV_STYLE}
           deferred="انزاحت لغد — الحفظ لم يتأثر"
-          dueTxt="بانتظار حفظ جديد"
+          dueTxt="—"
           onPick={(v) => pick('major', v)}
           opts={R}
-          badge={row.major && row.major.pendingQ > 0 ? <span className="rounded bg-violet-100 px-1.5 text-[10px] font-bold text-violet-800">بالطابور {amountLabel(row.major.pendingQ)}</span> : null}
+          badge={row.major && row.major.cycle > 1 ? <span className="rounded bg-violet-100 px-1.5 text-[10px] font-bold text-violet-800">الدورة {arNum(row.major.cycle)}</span> : null}
         />
       ) : null}
     </tr>
@@ -225,10 +225,10 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
               ☎ {student.phone}
             </span>
             <span className={'rounded-full px-2 py-0.5 ' + dirChip.cls}>{dirChip.txt}</span>
-            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700">صغرى: تلقائية = حفظ الأمس</span>
+            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700">صغرى: من حفظ الأمس — تحتاج تعليم «تم»</span>
             {student.majorEnabled ? (
               <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">
-                كبرى: {amountLabel(student.majorBaseQ)} يوميًا{plan.majorPendingQ > 0 ? ` · في الطابور ${amountLabel(plan.majorPendingQ)}` : ''}
+                كبرى: تلقائية من الناس ← الفاتحة
               </span>
             ) : (
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-400">كبرى: غير مفعّلة</span>

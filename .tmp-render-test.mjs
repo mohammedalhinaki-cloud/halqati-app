@@ -236,6 +236,12 @@ function buildPlan(student, settings) {
     const lo = mapQ(a), hi = mapQ(b);
     return { lo: Math.min(lo, hi), hi: Math.max(lo, hi) };
   };
+  const sliceDescQ = (j) => {
+    if (j < 0 || j >= totalSlots) return null;
+    const b = TOTAL_Q - j * baseQ;
+    const a = Math.max(0, b - baseQ);
+    return { lo: a, hi: b };
+  };
   const takeSpans = (queue, want) => {
     const taken = [];
     let left = want;
@@ -258,10 +264,9 @@ function buildPlan(student, settings) {
   let misses = 0;
   let savedQ = 0;
   let mMisses = 0;
-  const mFed = [];
   const minorFed = [];
   let nMinor = 0;
-  const stats = { saved: 0, missed: 0, absent: 0, pending: 0, minorDone: 0, minorMissed: 0, major: { saved: 0, missed: 0, absent: 0, savedQ: 0, pendingDays: 0 } };
+  const stats = { saved: 0, missed: 0, absent: 0, pending: 0, minorDone: 0, minorMissed: 0, minorAbsent: 0, minorSavedQ: 0, major: { saved: 0, missed: 0, absent: 0, savedQ: 0, pendingDays: 0 } };
   let dayIdx = 0;
   let nextDue = 0;
   const step = (d, beyondPlan) => {
@@ -303,55 +308,50 @@ function buildPlan(student, settings) {
       forward: !descending,
       empty: scheduled == null
     });
-    const reviewAt = (feed, missesRef, dayI, base, status) => {
-      const matured = feed.filter((x) => x.day < dayI).length;
-      const due = Math.max(0, Math.min(matured, dayI - missesRef.n) - 1);
-      const cell = { plannedQ: 0, qLo: null, qHi: null, status: status || null, pendingDays: missesRef.n };
-      if (status === "missed" || status === "absent") {
-        missesRef.n++;
-        return cell;
+    const normSt = (v) => v === "saved" ? "done" : v || null;
+    const minorStatus = normSt(stOf(d.iso, "minor"));
+    let minorCell = { plannedQ: 0, qLo: null, qHi: null, status: minorStatus, pendingDays: nMinor };
+    if (minorStatus === "missed" || minorStatus === "absent") {
+      nMinor++;
+      stats[minorStatus === "missed" ? "minorMissed" : "minorAbsent"]++;
+    } else {
+      const mslot = Math.max(0, dayIdx - nMinor);
+      const it = minorFed[mslot] || null;
+      const src = it || sliceQ(mslot > 0 ? mslot - 1 : null);
+      if (src) {
+        const q = Math.min(src.hi - src.lo, baseQ);
+        minorCell = { plannedQ: q, qLo: src.lo, qHi: src.lo + q, status: minorStatus === "done" ? "done" : null, preview: !it, pendingDays: nMinor };
+        if (minorStatus === "done") {
+          stats.minorDone++;
+          stats.minorSavedQ += q;
+        }
       }
-      const it = feed[due];
-      if (it) {
-        const q = Math.min(it.hi - it.lo, base);
-        cell.plannedQ = q;
-        cell.qLo = it.lo;
-        cell.qHi = it.lo + q;
-        if (status === "done" || status === "saved") cell.status = "done";
-        else cell.preview = !it.real;
-        cell.hasMore = feed.length > due + 1;
-      }
-      return cell;
-    };
-    row.minor = reviewAt(minorFed, { get n() {
-      return nMinor;
-    }, set n(v) {
-      nMinor = v;
-    } }, dayIdx, baseQ, stOf(d.iso, "minor"));
-    if (row.minor.status === "missed" || row.minor.status === "absent") stats.minorMissed++;
-    if (minorRealDue(minorFed, dayIdx - nMinor)) stats.minorDone++;
-    if (majorOn) {
-      row.major = reviewAt(mFed, { get n() {
-        return mMisses;
-      }, set n(v) {
-        mMisses = v;
-      } }, dayIdx, majorBaseQ, stOf(d.iso, "major"));
-      const ms = row.major.status;
-      if (ms === "done") {
-        stats.major.saved++;
-        stats.major.savedQ += row.major.plannedQ;
-      } else if (ms === "missed" || ms === "absent") stats.major[ms === "missed" ? "missed" : "absent"]++;
-      stats.major.pendingDays = mMisses;
-      row.major.pendingQ = Math.max(0, mFed.length - Math.min(mFed.length, Math.max(0, dayIdx - mMisses))) * baseQ;
     }
-    if (hSpan && (hStatus === "saved" || hStatus == null)) minorFed.push({ ...hSpan, real: hStatus === "saved", day: dayIdx });
-    if (hStatus === "saved" && scheduled) mFed.push({ ...scheduled, real: true, day: dayIdx });
+    row.minor = minorCell;
+    if (majorOn) {
+      const majStatus = normSt(stOf(d.iso, "major"));
+      let majCell = { plannedQ: 0, qLo: null, qHi: null, status: majStatus, pendingDays: mMisses };
+      if (majStatus === "missed" || majStatus === "absent") {
+        mMisses++;
+        stats.major[majStatus]++;
+      } else {
+        const j = Math.max(0, dayIdx - mMisses);
+        const span = j < totalSlots ? sliceDescQ(j) : null;
+        if (span) {
+          majCell = { plannedQ: span.hi - span.lo, qLo: span.lo, qHi: span.hi, status: majStatus === "done" ? "done" : null, preview: false, cycle: Math.floor(j / totalSlots) + 1, pendingDays: mMisses };
+          if (majStatus === "done") {
+            stats.major.saved++;
+            stats.major.savedQ += majCell.plannedQ;
+          }
+        }
+      }
+      stats.major.pendingDays = mMisses;
+      row.major = majCell;
+      row.major.pendingQ = Math.max(0, totalSlots - Math.max(0, dayIdx - mMisses)) * baseQ;
+    }
+    if (hStatus === "saved" && scheduled) minorFed.push({ ...scheduled, real: true, day: dayIdx });
     dayIdx++;
     rows.push(row);
-  };
-  const minorRealDue = (feed, due) => {
-    const j = Math.max(0, Math.min(feed.length - 1, due - 1));
-    return feed[j] && feed[j].real;
   };
   for (const d of days) {
     if (d.holiday) {
@@ -384,12 +384,8 @@ function buildPlan(student, settings) {
       }
     }
   }
-  const dueMinorNow = Math.min(minorFed.length, Math.max(0, dayIdx - nMinor));
-  stats.minorPendingQ = minorFed.length - dueMinorNow > 0 ? (minorFed.length - dueMinorNow) * baseQ : 0;
-  stats.minorMissed = stats.minorMissed || 0;
-  stats.minorDone = stats.minorDone || 0;
-  const dueMajorNow = Math.min(mFed.length, Math.max(0, dayIdx - mMisses));
-  stats.majorPendingQ = Math.max(0, mFed.length - dueMajorNow) * baseQ;
+  stats.minorPendingQ = Math.max(0, minorFed.length - Math.max(0, dayIdx - nMinor)) * baseQ;
+  stats.majorPendingQ = majorOn ? Math.max(0, totalSlots - Math.max(0, dayIdx - mMisses)) * baseQ : 0;
   const sFrom = surahByNumber(fromN);
   const sTo = surahByNumber(toN);
   return {
@@ -476,7 +472,7 @@ function newStudent(form) {
   return {
     id: "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     name: form.name.trim(),
-    phone: form.phone.trim(),
+    phone: form.phone.trim() || "\u2014",
     level: form.level,
     halaqa: form.halaqa.trim() || "\u2014",
     dailyHifz: Number(form.dailyHifz),
@@ -590,7 +586,7 @@ function DayRow({ row, student, onStatus }) {
     /* @__PURE__ */ jsx(
       MarkCell,
       {
-        label: "\u0645\u0631\u0627\u062C\u0639\u0629 \u0635\u063A\u0631\u0649 (\u062A\u0644\u0642\u0627\u0626\u064A\u0629)",
+        label: "\u0645\u0631\u0627\u062C\u0639\u0629 \u0635\u063A\u0631\u0649 (\u0645\u0646 \u062D\u0641\u0638 \u0627\u0644\u0623\u0645\u0633)",
         span: row.minor ? { qLo: row.minor.qLo, qHi: row.minor.qHi } : null,
         status: row.minor && row.minor.status,
         amount: row.minor && row.minor.plannedQ,
@@ -612,12 +608,12 @@ function DayRow({ row, student, onStatus }) {
         preview: row.major && row.major.preview,
         style: REV_STYLE,
         deferred: "\u0627\u0646\u0632\u0627\u062D\u062A \u0644\u063A\u062F \u2014 \u0627\u0644\u062D\u0641\u0638 \u0644\u0645 \u064A\u062A\u0623\u062B\u0631",
-        dueTxt: "\u0628\u0627\u0646\u062A\u0638\u0627\u0631 \u062D\u0641\u0638 \u062C\u062F\u064A\u062F",
+        dueTxt: "\u2014",
         onPick: (v) => pick("major", v),
         opts: R,
-        badge: row.major && row.major.pendingQ > 0 ? /* @__PURE__ */ jsxs("span", { className: "rounded bg-violet-100 px-1.5 text-[10px] font-bold text-violet-800", children: [
-          "\u0628\u0627\u0644\u0637\u0627\u0628\u0648\u0631 ",
-          amountLabel(row.major.pendingQ)
+        badge: row.major && row.major.cycle > 1 ? /* @__PURE__ */ jsxs("span", { className: "rounded bg-violet-100 px-1.5 text-[10px] font-bold text-violet-800", children: [
+          "\u0627\u0644\u062F\u0648\u0631\u0629 ",
+          arNum(row.major.cycle)
         ] }) : null
       }
     ) : null
@@ -653,13 +649,8 @@ function StudentPlan({ student, settings, onStatus, onClear, onEdit }) {
             student.phone
           ] }),
           /* @__PURE__ */ jsx("span", { className: "rounded-full px-2 py-0.5 " + dirChip.cls, children: dirChip.txt }),
-          /* @__PURE__ */ jsx("span", { className: "rounded-full bg-sky-50 px-2 py-0.5 text-sky-700", children: "\u0635\u063A\u0631\u0649: \u062A\u0644\u0642\u0627\u0626\u064A\u0629 = \u062D\u0641\u0638 \u0627\u0644\u0623\u0645\u0633" }),
-          student.majorEnabled ? /* @__PURE__ */ jsxs("span", { className: "rounded-full bg-violet-50 px-2 py-0.5 text-violet-700", children: [
-            "\u0643\u0628\u0631\u0649: ",
-            amountLabel(student.majorBaseQ),
-            " \u064A\u0648\u0645\u064A\u064B\u0627",
-            plan.majorPendingQ > 0 ? ` \xB7 \u0641\u064A \u0627\u0644\u0637\u0627\u0628\u0648\u0631 ${amountLabel(plan.majorPendingQ)}` : ""
-          ] }) : /* @__PURE__ */ jsx("span", { className: "rounded-full bg-slate-100 px-2 py-0.5 text-slate-400", children: "\u0643\u0628\u0631\u0649: \u063A\u064A\u0631 \u0645\u0641\u0639\u0651\u0644\u0629" })
+          /* @__PURE__ */ jsx("span", { className: "rounded-full bg-sky-50 px-2 py-0.5 text-sky-700", children: "\u0635\u063A\u0631\u0649: \u0645\u0646 \u062D\u0641\u0638 \u0627\u0644\u0623\u0645\u0633 \u2014 \u062A\u062D\u062A\u0627\u062C \u062A\u0639\u0644\u064A\u0645 \xAB\u062A\u0645\xBB" }),
+          student.majorEnabled ? /* @__PURE__ */ jsx("span", { className: "rounded-full bg-violet-50 px-2 py-0.5 text-violet-700", children: "\u0643\u0628\u0631\u0649: \u062A\u0644\u0642\u0627\u0626\u064A\u0629 \u0645\u0646 \u0627\u0644\u0646\u0627\u0633 \u2190 \u0627\u0644\u0641\u0627\u062A\u062D\u0629" }) : /* @__PURE__ */ jsx("span", { className: "rounded-full bg-slate-100 px-2 py-0.5 text-slate-400", children: "\u0643\u0628\u0631\u0649: \u063A\u064A\u0631 \u0645\u0641\u0639\u0651\u0644\u0629" })
         ] })
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "text-left", children: [
@@ -1016,20 +1007,14 @@ function AddStudentForm({ onAdd }) {
     majorEnabled: false,
     majorFaces: 0.5
   });
-  const MAJOR_OPTS = [
-    { v: 0.25, label: "\u0631\u0628\u0639 \u0648\u062C\u0647" },
-    { v: 0.5, label: "\u0646\u0635\u0641 \u0648\u062C\u0647" },
-    { v: 0.75, label: "\u062B\u0644\u0627\u062B\u0629 \u0623\u0631\u0628\u0627\u0639 \u0648\u062C\u0647" },
-    { v: 1, label: "\u0648\u062C\u0647" },
-    { v: 1.5, label: "\u0648\u062C\u0647 \u0648\u0646\u0635\u0641" }
-  ];
   const [err, setErr] = useState4("");
   const set = (k) => (v) => setF((s) => ({ ...s, [k]: v }));
   const setLevel = (lv) => setF((s) => ({ ...s, level: lv, dailyHifz: LEVELS[lv].faces }));
   const submit = (e) => {
     e.preventDefault();
     if (!f.name.trim()) return setErr("\u0627\u0633\u0645 \u0627\u0644\u0637\u0627\u0644\u0628 \u0645\u0637\u0644\u0648\u0628");
-    if (!/^05\d{8}$/.test(f.phone.trim())) return setErr("\u0631\u0642\u0645 \u0627\u0644\u062C\u0648\u0627\u0644 \u064A\u0628\u062F\u0623 \u0628\u0640 05 \u0648\u0645\u0643\u0648\u0651\u0646 \u0645\u0646 10 \u0623\u0631\u0642\u0627\u0645");
+    const ph = f.phone.trim();
+    if (ph && !/^05\d{8}$/.test(ph)) return setErr("\u0625\u0630\u0627 \u0623\u062F\u062E\u0644\u062A\u0647: \u0631\u0642\u0645 \u062C\u0648\u0627\u0644 \u064A\u0628\u062F\u0623 \u0628\u0640 05 \u0648\u0645\u0643\u0648\u0651\u0646 \u0645\u0646 10 \u0623\u0631\u0642\u0627\u0645");
     setErr("");
     onAdd(newStudent(f));
     setF((s) => ({ ...s, name: "", phone: "" }));
@@ -1042,8 +1027,8 @@ function AddStudentForm({ onAdd }) {
         /* @__PURE__ */ jsx4("input", { className: "field", value: f.name, onChange: (e) => set("name")(e.target.value), placeholder: "\u0627\u0644\u0627\u0633\u0645 \u0627\u0644\u0643\u0627\u0645\u0644" })
       ] }),
       /* @__PURE__ */ jsxs4("label", { children: [
-        /* @__PURE__ */ jsx4("span", { className: "field-label", children: "\u062C\u0648\u0627\u0644 \u0648\u0644\u064A \u0627\u0644\u0623\u0645\u0631 *" }),
-        /* @__PURE__ */ jsx4("input", { className: "field", dir: "ltr", value: f.phone, onChange: (e) => set("phone")(e.target.value), placeholder: "05xxxxxxxx", inputMode: "numeric" })
+        /* @__PURE__ */ jsx4("span", { className: "field-label", children: "\u062C\u0648\u0627\u0644 \u0648\u0644\u064A \u0627\u0644\u0623\u0645\u0631 (\u0627\u062E\u062A\u064A\u0627\u0631\u064A)" }),
+        /* @__PURE__ */ jsx4("input", { className: "field", dir: "ltr", value: f.phone, onChange: (e) => set("phone")(e.target.value), placeholder: "\u0627\u062E\u062A\u064A\u0627\u0631\u064A \u2014 05xxxxxxxx", inputMode: "numeric" })
       ] }),
       /* @__PURE__ */ jsxs4("label", { children: [
         /* @__PURE__ */ jsx4("span", { className: "field-label", children: "\u0627\u0644\u0645\u0633\u062A\u0648\u0649" }),
@@ -1089,9 +1074,9 @@ function AddStudentForm({ onAdd }) {
             "\u062A\u0641\u0639\u064A\u0644 \u0627\u0644\u0645\u0631\u0627\u062C\u0639\u0629 \u0627\u0644\u0643\u0628\u0631\u0649"
           ] })
         ] }),
-        /* @__PURE__ */ jsxs4("label", { className: f.majorEnabled ? "" : "pointer-events-none opacity-40", children: [
-          /* @__PURE__ */ jsx4("span", { className: "field-label", children: "\u0645\u0642\u062F\u0627\u0631 \u0627\u0644\u0643\u0628\u0631\u0649 \u064A\u0648\u0645\u064A\u064B\u0627" }),
-          sel(MAJOR_OPTS, f.majorFaces, (v) => setF((s) => ({ ...s, majorFaces: Number(v) })))
+        /* @__PURE__ */ jsxs4("div", { className: f.majorEnabled ? "" : "opacity-40", children: [
+          /* @__PURE__ */ jsx4("span", { className: "field-label", children: "\u0646\u0638\u0627\u0645 \u0627\u0644\u0643\u0628\u0631\u0649" }),
+          /* @__PURE__ */ jsx4("p", { className: "mt-1 rounded-md bg-violet-50 px-2 py-1 text-[12px] font-bold text-violet-800", children: "\u27F2 \u062A\u0644\u0642\u0627\u0626\u064A\u0629 \u062A\u0646\u0627\u0632\u0644\u064A\u0629: \u062A\u0628\u062F\u0623 \u0645\u0646 \u0633\u0648\u0631\u0629 \u0627\u0644\u0646\u0627\u0633 \u0648\u062A\u0631\u0627\u062C\u0639 \u0648\u062C\u0647\u064B\u0627 (\u0645\u062B\u0644 \u0648\u0631\u062F \u0627\u0644\u062D\u0641\u0638) \u0643\u0644 \u064A\u0648\u0645 \u062D\u062A\u0649 \u0627\u0644\u0641\u0627\u062A\u062D\u0629\u060C \u062B\u0645 \u062A\u0639\u064A\u062F \u0627\u0644\u062F\u0648\u0631\u0629 \u0645\u0646 \u0627\u0644\u0646\u0627\u0633" })
         ] })
       ] }),
       /* @__PURE__ */ jsxs4("div", { className: "sm:col-span-2 lg:col-span-4 flex items-center justify-between", children: [
