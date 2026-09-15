@@ -26,6 +26,12 @@ export default function RootLayout({ children }) {
               "setTimeout(function(){if(!window.__appBooted){var b=document.getElementById('boot-fallback');if(b)b.style.display='block';}},3000)",
           }}
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var K='halqati-reload-at';var prev=+sessionStorage.getItem(K)||0;if(Date.now()-prev<60000)return;function boom(){sessionStorage.setItem(K,Date.now());location.reload()}window.addEventListener('error',function(e){var m=(e&&e.message)||'';if(/dynamically imported module|Importing a module script failed|Loading chunk/.test(m)||(e&&e.target&&(e.target.tagName==='SCRIPT'||e.target.tagName==='LINK'))){boom()}},true);}catch(_){}})()",
+          }}
+        />
       </head>
       <body className="bg-slate-100 font-naskh text-slate-800 antialiased">
         {/* shown only if the client bundle never boots (3s failsafe above) */}

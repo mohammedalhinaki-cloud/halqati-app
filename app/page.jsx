@@ -51,11 +51,13 @@ export default function Home() {
     } catch {}
   }, [db]);
 
-  // PWA service worker (scope-relative -> works on Pages subpath and Netlify root)
-  useEffect(() => {
+  // today's Hijri date chip (client-only to avoid build-time hydration mismatch)
   useEffect(() => {
     if (typeof window !== 'undefined') setTodayH(formatHijri(todayISO()));
   }, []);
+
+  // PWA service worker (scope-relative -> works on the Pages subpath)
+  useEffect(() => {
     if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
     let reloaded = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
