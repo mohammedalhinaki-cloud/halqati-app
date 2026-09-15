@@ -81,6 +81,10 @@ export default function Home() {
       }),
     []
   );
+  const editStudent = useCallback(
+    (id, patch) => setDb((s) => ({ ...s, students: s.students.map((x) => (x.id === id ? { ...x, ...patch } : x)) })),
+    []
+  );
   const setStatus = useCallback(
     (sid, date, status) =>
       setDb((s) => ({
@@ -137,7 +141,7 @@ export default function Home() {
         ) : (
           <>
             <StudentTabs students={db.students} activeId={active?.id} onPick={(id) => setDb((s) => ({ ...s, activeId: id }))} onRemove={removeStudent} />
-            {active && <StudentPlan student={active} settings={db.settings} onStatus={(date, st) => setStatus(active.id, date, st)} onClear={clearStatuses} />}
+            {active && <StudentPlan student={active} settings={db.settings} onStatus={(date, st) => setStatus(active.id, date, st)} onClear={clearStatuses} onEdit={(patch) => editStudent(active.id, patch)} />}
           </>
         )}
 
