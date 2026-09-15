@@ -7,11 +7,13 @@ import StudentPlan from '../components/StudentPlan';
 import { STORAGE_KEY, seedState } from '../lib/store';
 import { META, SURAHS } from '../lib/quran';
 import { arDec, arNum } from '../lib/quran';
+import { formatHijri, todayISO } from '../lib/hijri.js';
 
 const FULL_QURAN_FACES = (SURAHS[SURAHS.length - 1].endQ - SURAHS[0].startQ) / META.quartersPerPage;
 
 export default function Home() {
   const [db, setDb] = useState(null);
+  const [todayH, setTodayH] = useState('—');
 
   useEffect(() => {
     let loaded = null;
@@ -51,6 +53,9 @@ export default function Home() {
 
   // PWA service worker (scope-relative -> works on Pages subpath and Netlify root)
   useEffect(() => {
+  useEffect(() => {
+    if (typeof window !== 'undefined') setTodayH(formatHijri(todayISO()));
+  }, []);
     if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
     let reloaded = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -130,6 +135,7 @@ export default function Home() {
             <h1 className="text-center text-xl font-extrabold leading-7 sm:text-2xl">
               بطاقة متابعة الحفظ والمراجعة
               <span className="block text-[13px] font-bold opacity-80">استمارة إلكترونية · الفصل الدراسي الأول ١٤٤٨هـ</span>
+              <span className="block text-[11px] font-normal opacity-70">نسخة الموقع <b>{process.env.NEXT_PUBLIC_BUILD}</b> · اليوم: {todayH}</span>
             </h1>
             <div className="text-[11px] leading-5 opacity-90 sm:text-left" dir="ltr">
               Madinah mushaf pagination

@@ -25,10 +25,16 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run build
+      - name: Build (root + fresh-path twin for cache-busting)
+        run: |
+          export NEXT_PUBLIC_BUILD="$(date -u +%y%m%d-%H%M) Pages"
+          npm run build && cp -a out out-root
+          NEXT_BASE=/halqati-app/v3 NEXT_PUBLIC_BUILD="$NEXT_PUBLIC_BUILD ·v3" npm run build && cp -a out out-v3
+          rm -rf out && cp -a out-root out && cp -a out-v3 out/v3
       - name: Verify export
         run: |
           test -f out/index.html || { echo "out/index.html missing"; exit 1; }
+          test -f out/v3/index.html || { echo "out/v3/index.html missing"; exit 1; }
           test -f out/.nojekyll || echo "warning: .nojekyll missing"
           grep -q "_next" out/index.html
       - uses: actions/upload-pages-artifact@v3

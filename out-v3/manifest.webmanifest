@@ -1,0 +1,19 @@
+{
+  "name": "حلقتي — بطاقة متابعة الحفظ والمراجعة",
+  "short_name": "حلقتي",
+  "description": "خطة حفظ يومية لأهل القرآن: أوجه مصحف المدينة، تأجيل ذكي للتخلف، ومتابعة بالهجري",
+  "id": "/halqati-app/",
+  "start_url": "./",
+  "scope": "./",
+  "lang": "ar",
+  "dir": "rtl",
+  "orientation": "any",
+  "display": "standalone",
+  "background_color": "#022c22",
+  "theme_color": "#065f46",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
