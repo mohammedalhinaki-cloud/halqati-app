@@ -56,36 +56,18 @@ export default function Home() {
     if (typeof window !== 'undefined') setTodayH(formatHijri(todayISO()));
   }, []);
 
-  // PWA service worker (scope-relative -> works on the Pages subpath)
+  // No service worker by design: the deployed sw.js self-destructs (purges
+  // caches + unregisters). Here we only sweep away any worker a previous
+  // build may have left behind — then the page is plain HTTP-cached, which
+  // is correct for content-hashed static exports and cannot go stale.
   useEffect(() => {
-    if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
-    let reloaded = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      // new worker took over (its caches are fresh) -> swap the page once, no loop
-      if (!reloaded) {
-        reloaded = true;
-        location.reload();
-      }
-    });
-    const reg = () =>
-      navigator.serviceWorker
-        .register('./sw.js')
-        .then(async (r) => {
-          try {
-            await r.update(); // force re-download of sw.js (bypasses HTTP cache)
-          } catch {}
-          r.addEventListener('updatefound', () => {
-            const nw = r.installing;
-            if (!nw) return;
-            nw.addEventListener('statechange', () => {
-              if (nw.state === 'installed' && navigator.serviceWorker.controller) nw.postMessage('SKIPME');
-            });
-          });
-        })
-        .catch(() => {});
-    if (document.readyState === 'complete') reg();
-    else window.addEventListener('load', reg);
-    return () => window.removeEventListener('load', reg);
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.getRegistrations().then((rs) => {
+      rs.forEach((r) => r.unregister());
+    }).catch(() => {});
+    if (window.caches && caches.keys) {
+      caches.keys().then((ks) => ks.forEach((k) => caches.delete(k))).catch(() => {});
+    }
   }, []);
 
   const setSettings = useCallback((patch) => setDb((s) => ({ ...s, settings: { ...s.settings, ...patch } })), []);

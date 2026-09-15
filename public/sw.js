@@ -1,61 +1,30 @@
-/* App-shell service worker v3.
-   Pages (navigation) are fetched NETWORK-FIRST so a deploy is visible on the
-   very next reload, falling back to cache when offline.
-   Hashed build assets / icons / manifest are cache-first (immutable filenames).
-   Any stale cache from an older CACHE version is purged on activate. */
-const CACHE = 'halqati-v3';
-
+/* Self-destructing service worker (v4-final).
+   History: SW caching on github.io kept serving poisoned shells after bad
+   deploys (users saw "Application error" long after the fix). The app is a
+   static export with content-hashed assets — plain HTTP caching plus the
+   in-page build-mismatch auto-reload guard are enough. This worker's ONLY
+   job is to remove every registration and purge all caches on activate,
+   then stay out of the way. */
 self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches
-      .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
-});
-
-self.addEventListener('message', (e) => {
-  if (e.data === 'SKIPME') self.skipWaiting();
-});
-
-self.addEventListener('fetch', (e) => {
-  const req = e.request;
-  if (req.method !== 'GET') return;
-  const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return;
-
-  if (req.mode === 'navigate') {
-    e.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('./', copy));
-          return res;
-        })
-        .catch(() =>
-          caches.match(req).then(
-            (hit) => hit || caches.match('./').then((h) => h || caches.match('./index.html'))
+    (async () => {
+      try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      } catch {}
+      try {
+        const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        await self.registration.unregister();
+        await Promise.all(
+          all.map((c) =>
+            c.navigate ? c.navigate(c.url.split('?')[0] + '?r=' + Date.now()) : Promise.resolve()
           )
-        )
-    );
-    return;
-  }
-
-  e.respondWith(
-    caches.match(req).then(
-      (hit) =>
-        hit ||
-        fetch(req).then((res) => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(req, copy));
-          }
-          return res;
-        })
-    )
+        );
+      } catch {}
+    })()
   );
 });
