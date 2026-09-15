@@ -1,5 +1,5 @@
 'use client';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { buildPlan, weekKey, weekdayName, hijriInfo } from '../lib/plan';
 import { amountLabel, arNum, arDec, spanLabel, QPP } from '../lib/quran';
 import { LEVELS } from '../lib/store';
@@ -156,9 +156,10 @@ function DayRow({ row, student, onStatus }) {
   );
 }
 
-export default function StudentPlan({ student, settings, onStatus, onClear }) {
+export default function StudentPlan({ student, settings, onStatus, onClear, onEdit }) {
   const plan = useMemo(() => buildPlan(student, settings), [student, settings]);
   const { rows, stats, totalQ, savedQ, range } = plan;
+  const [edit, setEdit] = useState(null);
 
   const weeks = useMemo(() => {
     const m = [];
@@ -201,6 +202,14 @@ export default function StudentPlan({ student, settings, onStatus, onClear }) {
           </div>
         </div>
         <div className="text-left">
+          {onEdit && (
+            <button
+              onClick={() => setEdit(edit ? null : { name: student.name, phone: student.phone, from: String(plan.fromN), to: String(plan.toN), dailyHifz: String(student.dailyHifz), sughra: String(student.sughra ?? 0), kubra: String(student.kubra ?? 0) })}
+              className={'btn mb-1 me-1 border text-xs font-bold no-print ' + (edit ? 'border-slate-700 bg-slate-700 text-white' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-100')}
+            >
+              ✎ تعديل الطالب
+            </button>
+          )}
           <div className="text-xs text-slate-500">
             المدى: <b className="text-slate-800">{range.fromSurah} ← {range.toSurah}</b> = <b className="text-slate-800">{arDec(range.faces)}</b> وجهًا · <b className="text-slate-800">{arNum(range.planDays)}</b> يوم دراسة
           </div>

@@ -81,6 +81,10 @@ export default function Home() {
       }),
     []
   );
+  const editStudent = useCallback(
+    (id, patch) => setDb((s) => ({ ...s, students: s.students.map((x) => (x.id === id ? { ...x, ...patch } : x)) })),
+    []
+  );
   const setStatus = useCallback(
     (sid, date, stream, status) =>
       setDb((s) => ({

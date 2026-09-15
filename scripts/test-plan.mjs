@@ -33,10 +33,15 @@ ok('pending days project sequentially (+2 quarters/day; range = 410 q = 102.5 fa
 assert.equal(p.rows.filter((r) => r.type === 'holiday').length, 1);
 ok('holiday rendered as band row (23 Sep)');
 
-/* 4. smart rollover: missed -> its whole amount cascades to next working day */
-p = buildPlan({ ...base, statuses: { '2026-09-21': 'missed' } }, settings);
+/* 4. smart rollover (slide model): missed day keeps its OWN slice; tomorrow performs it;
+      zero merging/zero doubling; holidays also slide the queue (their slice rolls forward) */
+p = buildPlan({ ...base, statuses: { '2026-09-21': 'missed' } }, settings); // hol 2026-09-23
 days = p.rows.filter((r) => r.type === 'day');
+assert.equal(days[0].fromQ, 2006, '20th: 2006-2008');
+assert.equal(days[0].toQ, 2008);
 assert.equal(days[1].status, 'missed');
+assert.equal(days[1].qLo, 2008, '21st red cell = its own slice only (no merge)');
+assert.equal(days[1].qHi, 2010);
 assert.equal(days[1].plannedQ, 0, 'missed day saves nothing');
 assert.equal(days[1].qHi, null, 'missed day has no content (red, shifted)');
 assert.equal(days[2].amountQ, 2, 'next day keeps EXACTLY its daily dose — no merge, no burdening');
@@ -76,7 +81,7 @@ assert.equal(p.rows.filter((r) => r.type === 'day')[1].qLo, 2006, 'the 21st show
 assert.equal(p.carryLeft, 0, 'nothing merges — the plan merely slid');
 ok('extension day at plan end; queue drains only via saves (no merge)');
 
-/* 7. range clamping: small surah range exhausts without overrun */
+/* 7. range clamping: small surah range exhausts; rolled content vanishes with the range */
 p = buildPlan({ ...base, from: 112, to: 114 }, settings); // الاخلاص..الناس = 1 face
 const small = p.totalQ;
 days = p.rows.filter((r) => r.type === 'day');
