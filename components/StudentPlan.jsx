@@ -76,12 +76,62 @@ function CtlBtns({ value, onPick, opts }) {
   );
 }
 
+function MarkCell({ label, span, status, amount, style, preview, deferred, dueTxt, onPick, opts, badge }) {
+  const lbl = span && span.qLo != null && span.qHi > span.qLo ? spanLabel(span.qLo, span.qHi) : null;
+  const st = status ? style[status] : null;
+  return (
+    <td className={'align-top border-r border-slate-100 ' + (status === 'missed' || status === 'absent' ? 'bg-rose-50/60' : status === 'done' || status === 'saved' ? 'bg-emerald-50/50' : '')}>
+      <div className="mb-0.5 text-[10px] font-extrabold tracking-wide text-slate-400">{label}</div>
+      <div className="text-[12px] leading-5">
+        {lbl ? (
+          <span className={preview ? 'italic text-slate-400' : 'font-bold text-slate-800'}>
+            {span.amountTxt ? span.amountTxt + ' — ' : ''}سورة {lbl.surah} <span className="font-normal text-slate-500">{lbl.range}</span>
+          </span>
+        ) : st ? (
+          <span className="font-bold text-rose-600">— {deferred}</span>
+        ) : (
+          <span className="text-slate-300">{dueTxt}</span>
+        )}
+      </div>
+      <div className="mt-0.5 flex flex-wrap items-center gap-1">
+        {st && <span className={'rounded border px-1.5 py-0.5 text-[10px] font-extrabold ' + st.cls}>{st.txt}</span>}
+        {preview && !st && <span className="rounded bg-slate-100 px-1.5 text-[10px] font-bold text-slate-500">معاينة مجدولة</span>}
+        {amount != null && amount > 0 && !st && <span className="text-[11px] font-extrabold text-slate-600">{amountLabel(amount)}</span>}
+        {badge}
+      </div>
+      {onPick && (
+        <div className="mt-1 flex flex-wrap gap-1 no-print">
+          {opts.map(([v, txt, on]) => (
+            <button
+              key={v}
+              onClick={() => onPick(v)}
+              className={'rounded border px-1.5 py-0.5 text-[10px] font-bold ' + (status === v ? `${on} border-transparent text-white shadow` : 'border-slate-300 bg-white text-slate-500 hover:bg-slate-100')}
+            >
+              {txt}
+            </button>
+          ))}
+        </div>
+      )}
+    </td>
+  );
+}
+
 function DayRow({ row, student, onStatus }) {
   const hj = hijriInfo(row.date);
-  const lbl = row.qLo != null && row.qHi > row.qLo ? spanLabel(row.qLo, row.qHi) : null;
-  const st = row.status ? HIFZ_STYLE[row.status] : null;
-  const hifzPick = (v) => onStatus(row.date, 'hifz', row.status === v ? null : v);
-  const majorPick = (v) => onStatus(row.date, 'major', (row.major && row.major.status) === v ? null : v);
+  const pick = (stream, v) => {
+    const cur = stream === 'hifz' ? row.status : row[stream] && row[stream].status;
+    onStatus(row.date, stream, cur === v ? null : v);
+  };
+  const H = [
+    ['saved', 'حفظ', 'bg-emerald-600'],
+    ['missed', 'لم يحفظ', 'bg-rose-600'],
+    ['absent', 'غائب', 'bg-stone-500'],
+  ];
+  const R = [
+    ['done', 'تم', 'bg-emerald-600'],
+    ['missed', 'لم تتم', 'bg-rose-600'],
+    ['absent', 'غائب', 'bg-stone-500'],
+  ];
   return (
     <tr className={DAY_CELL(row)}>
       <td className="font-bold whitespace-nowrap">{weekdayName(row.date)}</td>
@@ -89,72 +139,53 @@ function DayRow({ row, student, onStatus }) {
         <div className="text-[13px] font-extrabold text-slate-800">{hj.dm}</div>
         <div className="text-[10px] text-slate-400">{hj.y}</div>
         {row.beyondPlan && <div className="text-[10px] font-bold text-rose-600">يوم إضافي بعد الخطة</div>}
-      </td>
-      <td>
-        {row.empty ? (
-          <span className="text-slate-400">اكتمل المطلوب — لا جديد</span>
-        ) : (
-          <>
-            <div className="font-bold text-slate-800">سورة {lbl ? lbl.surah : '—'}</div>
-            <div className="text-[11px] text-slate-500">{lbl ? lbl.range : ''}</div>
-            {(row.status === 'missed' || row.status === 'absent') && row.rolledToNext > 0 && (
-              <div className="mt-0.5 inline-block rounded bg-rose-100 px-1.5 text-[10px] font-bold text-rose-700">
-                ↩ {amountLabel(row.rolledToNext)} ينزاح لغدٍ — بدون دمج في يوم واحد
-              </div>
-            )}
-          </>
+        {row.shiftedBy > 0 && (
+          <div className="mt-0.5 rounded bg-amber-100 px-1 text-[9px] font-bold text-amber-800">متأخرة {arNum(row.shiftedBy)} يوم</div>
         )}
-        <div className="mt-0.5 flex flex-wrap items-center gap-1">
-          <span className="text-[12px] font-extrabold">{amountLabel(row.amountQ)}</span>
-          {!row.status && !row.empty && <span className="rounded bg-slate-100 px-1.5 text-[10px] font-bold text-slate-500">مجدول</span>}
-          {row.shiftedBy > 0 && (
-            <span className="rounded bg-amber-100 px-1.5 text-[10px] font-bold text-amber-800">الخطة متأخرة {arNum(row.shiftedBy)} يومًا — انزياح، لا دمج</span>
-          )}
-        </div>
       </td>
-      <td>{st ? <span className={'inline-block rounded border px-2 py-0.5 text-xs font-extrabold ' + st.cls}>{st.txt}</span> : <span className="text-slate-300">—</span>}</td>
-      <td>
-        <CtlBtns
-          value={row.status}
-          onPick={hifzPick}
-          opts={[
-            ['saved', 'حفظ', 'bg-emerald-600'],
-            ['missed', 'لم يحفظ', 'bg-rose-600'],
-            ['absent', 'غائب', 'bg-stone-500'],
-          ]}
-        />
-      </td>
-      <ReviewCell
-        cell={row.minor}
+      <MarkCell
+        label="حفظ جديد"
+        span={{ qLo: row.qLo, qHi: row.qHi }}
+        status={row.status}
+        amount={row.amountQ}
+        style={HIFZ_STYLE}
+        deferred="انزاح لليوم التالي بالكامل"
+        dueTxt={row.empty ? 'اكتمل المدى — لا جديد' : '—'}
+        onPick={(v) => pick('hifz', v)}
+        opts={H}
+        badge={
+          row.rolledToNext > 0 ? (
+            <span className="rounded bg-rose-100 px-1.5 text-[10px] font-bold text-rose-700">↩ {amountLabel(row.rolledToNext)} ينزاح لغد — بدون دمج</span>
+          ) : null
+        }
+      />
+      <MarkCell
+        label="مراجعة صغرى (تلقائية)"
+        span={row.minor ? { qLo: row.minor.qLo, qHi: row.minor.qHi } : null}
+        status={row.minor && row.minor.status}
+        amount={row.minor && row.minor.plannedQ}
+        preview={row.minor && row.minor.preview}
         style={REV_STYLE}
-        deferred="—"
+        deferred="انزاحت للصباح القادم"
         dueTxt="لا شيء مستحق"
+        onPick={(v) => pick('minor', v)}
+        opts={R}
       />
       {student.majorEnabled ? (
-        <>
-          <ReviewCell
-            cell={row.major}
-            style={REV_STYLE}
-            deferred="أُجِّلت لليوم التالي"
-            dueTxt="بانتظار حفظ جديد"
-          />
-          <td className="align-top">
-            <CtlBtns
-              value={(row.major && row.major.status) || null}
-              onPick={majorPick}
-              opts={[
-                ['done', 'تمت', 'bg-violet-600'],
-                ['missed', 'لم تتم', 'bg-rose-600'],
-                ['absent', 'غائب', 'bg-stone-500'],
-              ]}
-            />
-          </td>
-        </>
-      ) : (
-        <td colSpan={2} className="text-center align-middle text-[11px] text-slate-400">
-          غير مفعّلة
-        </td>
-      )}
+        <MarkCell
+          label="مراجعة كبرى"
+          span={row.major ? { qLo: row.major.qLo, qHi: row.major.qHi } : null}
+          status={row.major && row.major.status}
+          amount={row.major && row.major.plannedQ}
+          preview={row.major && row.major.preview}
+          style={REV_STYLE}
+          deferred="انزاحت لغد — الحفظ لم يتأثر"
+          dueTxt="بانتظار حفظ جديد"
+          onPick={(v) => pick('major', v)}
+          opts={R}
+          badge={row.major && row.major.pendingQ > 0 ? <span className="rounded bg-violet-100 px-1.5 text-[10px] font-bold text-violet-800">بالطابور {amountLabel(row.major.pendingQ)}</span> : null}
+        />
+      ) : null}
     </tr>
   );
 }
@@ -177,7 +208,7 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
 
   const pct = totalQ > 0 ? Math.min(100, Math.round((savedQ / totalQ) * 100)) : 0;
   const level = LEVELS[student.level] || { label: student.level };
-  const cols = student.majorEnabled ? 8 : 6;
+  const cols = student.majorEnabled ? 5 : 4;
   const dirChip = plan.descending
     ? { txt: 'اتجاه الحفظ: تنازلي ↓ (المِرآة فعّالة)', cls: 'bg-amber-50 text-amber-800 border border-amber-200' }
     : { txt: 'اتجاه الحفظ: تصاعدي ↑ (عادي، بدون مرآة)', cls: 'bg-emerald-50 text-emerald-800 border border-emerald-200' };
@@ -229,6 +260,11 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
         <Stat label="أيام مجدولة متبقية" value={arNum(stats.pending)} cls="border-sky-200 bg-sky-50 text-sky-800" />
         <Stat label="المحفوظ" value={`${arDec(savedQ / QPP)} / ${arDec(totalQ / QPP)}`} cls="border-slate-300 bg-slate-50 text-slate-700" />
       </div>
+      {(stats.minorDone > 0 || stats.minorMissed > 0) && (
+        <div className="mb-2 flex flex-wrap gap-2 text-[11px] font-bold text-sky-700">
+          <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5">صغرى — تمت: {arNum(stats.minorDone)} · لم تتم: {arNum(stats.minorMissed)}</span>
+        </div>
+      )}
       {student.majorEnabled && (
         <div className="mb-3 flex flex-wrap gap-2 text-[11px] font-bold text-violet-700">
           <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5">
@@ -252,18 +288,9 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
             <tr>
               <th>اليوم</th>
               <th>التاريخ <span className="text-[10px] font-bold text-slate-500">(هجري)</span></th>
-              <th>الحفظ الجديد</th>
-              <th>حالة الحفظ</th>
-              <th>تحكم الحفظ</th>
-              <th className="!bg-sky-50">مراجعة صغرى <span className="text-[9px] font-bold text-sky-600">(تلقائية)</span></th>
-              {student.majorEnabled ? (
-                <>
-                  <th className="!bg-violet-50">مراجعة كبرى</th>
-                  <th className="!bg-violet-50">تحكم الكبرى</th>
-                </>
-              ) : (
-                <th colSpan={2}>المراجعة الكبرى — معطّلة لهذا الطالب</th>
-              )}
+              <th>الحفظ <span className="text-[9px] font-bold text-slate-500">(تسجيل مستقل)</span></th>
+              <th className="!bg-sky-50">الصغرى <span className="text-[9px] font-bold text-sky-600">(تلقائية من الأمس)</span></th>
+              {student.majorEnabled ? <th className="!bg-violet-50">الكبرى <span className="text-[9px] font-bold text-violet-600">(اختيارية)</span></th> : null}
             </tr>
           </thead>
           <tbody>

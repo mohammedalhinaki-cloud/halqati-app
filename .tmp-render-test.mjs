@@ -259,8 +259,9 @@ function buildPlan(student, settings) {
   let savedQ = 0;
   let mMisses = 0;
   const mFed = [];
-  let mConsumedQ = 0;
-  const stats = { saved: 0, missed: 0, absent: 0, pending: 0, major: { saved: 0, missed: 0, absent: 0, savedQ: 0, pendingDays: 0 } };
+  const minorFed = [];
+  let nMinor = 0;
+  const stats = { saved: 0, missed: 0, absent: 0, pending: 0, minorDone: 0, minorMissed: 0, major: { saved: 0, missed: 0, absent: 0, savedQ: 0, pendingDays: 0 } };
   let dayIdx = 0;
   let nextDue = 0;
   const step = (d, beyondPlan) => {
@@ -302,60 +303,55 @@ function buildPlan(student, settings) {
       forward: !descending,
       empty: scheduled == null
     });
-    if (hStatus !== "saved") {
-      const prev = rows.length ? rows[rows.length - 1] : null;
-      if (prev && prev.qLo != null) {
-        row.minor = { plannedQ: prev.qHi - prev.qLo, qLo: prev.qLo, qHi: prev.qHi, status: prev.status === "saved" ? "done" : null, preview: prev.status !== "saved" };
+    const reviewAt = (feed, missesRef, dayI, base, status) => {
+      const matured = feed.filter((x) => x.day < dayI).length;
+      const due = Math.max(0, Math.min(matured, dayI - missesRef.n) - 1);
+      const cell = { plannedQ: 0, qLo: null, qHi: null, status: status || null, pendingDays: missesRef.n };
+      if (status === "missed" || status === "absent") {
+        missesRef.n++;
+        return cell;
       }
-    } else {
-      const prev = rows.length ? rows[rows.length - 1] : null;
-      if (prev && prev.qLo != null) {
-        row.minor = { plannedQ: prev.qHi - prev.qLo, qLo: prev.qLo, qHi: prev.qHi, status: prev.status === "saved" ? "done" : null, preview: prev.status !== "saved" };
+      const it = feed[due];
+      if (it) {
+        const q = Math.min(it.hi - it.lo, base);
+        cell.plannedQ = q;
+        cell.qLo = it.lo;
+        cell.qHi = it.lo + q;
+        if (status === "done" || status === "saved") cell.status = "done";
+        else cell.preview = !it.real;
+        cell.hasMore = feed.length > due + 1;
       }
-    }
+      return cell;
+    };
+    row.minor = reviewAt(minorFed, { get n() {
+      return nMinor;
+    }, set n(v) {
+      nMinor = v;
+    } }, dayIdx, baseQ, stOf(d.iso, "minor"));
+    if (row.minor.status === "missed" || row.minor.status === "absent") stats.minorMissed++;
+    if (minorRealDue(minorFed, dayIdx - nMinor)) stats.minorDone++;
     if (majorOn) {
-      if (hStatus === "saved" && scheduled) mFed.push(scheduled);
-      const mStatus = stOf(d.iso, "major");
-      const mIdx = dayIdx - mMisses;
-      const dueSlots = Math.max(0, Math.min(mFed.length, mIdx));
-      const fedQ = mFed.slice(0, dueSlots).reduce((a, x) => a + x.hi - x.lo, 0);
-      const avail = Math.max(0, fedQ - mConsumedQ);
-      const spansOf = (want) => {
-        const queue = mFed.slice(0, dueSlots).map((x) => ({ ...x }));
-        let skip = mConsumedQ;
-        while (skip > 0 && queue.length) {
-          const q = queue[0].hi - queue[0].lo;
-          if (q <= skip) {
-            skip -= q;
-            queue.shift();
-          } else {
-            queue[0].lo += skip;
-            skip = 0;
-          }
-        }
-        return takeSpans(queue, want);
-      };
-      if (mStatus === "done" || mStatus === "saved") {
-        const spans = avail > 0 ? spansOf(Math.min(majorBaseQ, avail)) : [];
-        const q = spans.reduce((a, x) => a + x.hi - x.lo, 0);
-        mConsumedQ += q;
+      row.major = reviewAt(mFed, { get n() {
+        return mMisses;
+      }, set n(v) {
+        mMisses = v;
+      } }, dayIdx, majorBaseQ, stOf(d.iso, "major"));
+      const ms = row.major.status;
+      if (ms === "done") {
         stats.major.saved++;
-        stats.major.savedQ += q;
-        row.major = spans.length ? { plannedQ: q, qLo: spans[0].lo, qHi: spans[spans.length - 1].hi, status: "done" } : { plannedQ: 0, qLo: null, qHi: null, status: "done" };
-      } else if (mStatus === "missed" || mStatus === "absent") {
-        mMisses++;
-        stats.major[mStatus === "missed" ? "missed" : "absent"]++;
-        row.major = { plannedQ: 0, qLo: null, qHi: null, status: mStatus, pendingDays: mMisses };
-      } else if (avail > 0) {
-        const spans = spansOf(Math.min(majorBaseQ, avail));
-        row.major = { plannedQ: spans.reduce((a, x) => a + x.hi - x.lo, 0), qLo: spans[0].lo, qHi: spans[spans.length - 1].hi, status: null, pendingDays: mMisses, preview: true };
-      } else {
-        row.major = { plannedQ: 0, qLo: null, qHi: null, status: null, pendingDays: mMisses };
-      }
+        stats.major.savedQ += row.major.plannedQ;
+      } else if (ms === "missed" || ms === "absent") stats.major[ms === "missed" ? "missed" : "absent"]++;
       stats.major.pendingDays = mMisses;
+      row.major.pendingQ = Math.max(0, mFed.length - Math.min(mFed.length, Math.max(0, dayIdx - mMisses))) * baseQ;
     }
+    if (hSpan && (hStatus === "saved" || hStatus == null)) minorFed.push({ ...hSpan, real: hStatus === "saved", day: dayIdx });
+    if (hStatus === "saved" && scheduled) mFed.push({ ...scheduled, real: true, day: dayIdx });
     dayIdx++;
     rows.push(row);
+  };
+  const minorRealDue = (feed, due) => {
+    const j = Math.max(0, Math.min(feed.length - 1, due - 1));
+    return feed[j] && feed[j].real;
   };
   for (const d of days) {
     if (d.holiday) {
@@ -388,9 +384,12 @@ function buildPlan(student, settings) {
       }
     }
   }
-  stats.minorPendingQ = 0;
-  const allFedQ = mFed.reduce((a, x) => a + x.hi - x.lo, 0);
-  stats.majorPendingQ = Math.max(0, allFedQ - mConsumedQ);
+  const dueMinorNow = Math.min(minorFed.length, Math.max(0, dayIdx - nMinor));
+  stats.minorPendingQ = minorFed.length - dueMinorNow > 0 ? (minorFed.length - dueMinorNow) * baseQ : 0;
+  stats.minorMissed = stats.minorMissed || 0;
+  stats.minorDone = stats.minorDone || 0;
+  const dueMajorNow = Math.min(mFed.length, Math.max(0, dayIdx - mMisses));
+  stats.majorPendingQ = Math.max(0, mFed.length - dueMajorNow) * baseQ;
   const sFrom = surahByNumber(fromN);
   const sTo = surahByNumber(toN);
   return {
@@ -509,122 +508,119 @@ function Stat({ label, value, cls }) {
     /* @__PURE__ */ jsx("div", { className: "text-[11px] font-bold opacity-80", children: label })
   ] });
 }
-function ReviewCell({ cell, style, deferred, dueTxt }) {
-  const lbl = cell && cell.qLo != null && cell.qHi > cell.qLo ? spanLabel(cell.qLo, cell.qHi) : null;
-  const st = cell && cell.status ? style[cell.status] : null;
-  return /* @__PURE__ */ jsxs("td", { className: "align-top text-[12px] leading-5 " + (cell && (cell.status === "missed" || cell.status === "absent") ? "bg-rose-50/60" : ""), children: [
-    lbl ? /* @__PURE__ */ jsxs("span", { className: cell.preview ? "text-slate-400 italic" : "font-bold text-slate-800", children: [
+function MarkCell({ label, span, status, amount, style, preview, deferred, dueTxt, onPick, opts, badge }) {
+  const lbl = span && span.qLo != null && span.qHi > span.qLo ? spanLabel(span.qLo, span.qHi) : null;
+  const st = status ? style[status] : null;
+  return /* @__PURE__ */ jsxs("td", { className: "align-top border-r border-slate-100 " + (status === "missed" || status === "absent" ? "bg-rose-50/60" : status === "done" || status === "saved" ? "bg-emerald-50/50" : ""), children: [
+    /* @__PURE__ */ jsx("div", { className: "mb-0.5 text-[10px] font-extrabold tracking-wide text-slate-400", children: label }),
+    /* @__PURE__ */ jsx("div", { className: "text-[12px] leading-5", children: lbl ? /* @__PURE__ */ jsxs("span", { className: preview ? "italic text-slate-400" : "font-bold text-slate-800", children: [
+      span.amountTxt ? span.amountTxt + " \u2014 " : "",
       "\u0633\u0648\u0631\u0629 ",
       lbl.surah,
       " ",
-      /* @__PURE__ */ jsx("span", { className: "font-normal text-slate-500", children: lbl.range }),
-      cell.plannedQ > 0 && /* @__PURE__ */ jsxs("span", { className: "text-slate-400", children: [
-        " \xB7 ",
-        amountLabel(cell.plannedQ)
-      ] })
+      /* @__PURE__ */ jsx("span", { className: "font-normal text-slate-500", children: lbl.range })
     ] }) : st ? /* @__PURE__ */ jsxs("span", { className: "font-bold text-rose-600", children: [
       "\u2014 ",
       deferred
-    ] }) : /* @__PURE__ */ jsx("span", { className: "text-slate-300", children: dueTxt }),
-    st && /* @__PURE__ */ jsx("div", { className: "mt-0.5", children: /* @__PURE__ */ jsx("span", { className: "inline-block rounded border px-1.5 py-0.5 text-[10px] font-extrabold " + st.cls, children: st.txt }) }),
-    cell && cell.backlog > 0 && /* @__PURE__ */ jsxs("div", { className: "mt-0.5 inline-block rounded bg-violet-100 px-1.5 text-[10px] font-bold text-violet-800", children: [
-      amountLabel(cell.backlog),
-      " \u0643\u0628\u0631\u0649 \u0645\u0624\u062C\u064E\u0651\u0644\u0629 \u2014 \u062A\u0646\u0632\u0627\u062D\u060C \u0644\u0627 \u062A\u064F\u062F\u0645\u062C"
-    ] })
+    ] }) : /* @__PURE__ */ jsx("span", { className: "text-slate-300", children: dueTxt }) }),
+    /* @__PURE__ */ jsxs("div", { className: "mt-0.5 flex flex-wrap items-center gap-1", children: [
+      st && /* @__PURE__ */ jsx("span", { className: "rounded border px-1.5 py-0.5 text-[10px] font-extrabold " + st.cls, children: st.txt }),
+      preview && !st && /* @__PURE__ */ jsx("span", { className: "rounded bg-slate-100 px-1.5 text-[10px] font-bold text-slate-500", children: "\u0645\u0639\u0627\u064A\u0646\u0629 \u0645\u062C\u062F\u0648\u0644\u0629" }),
+      amount != null && amount > 0 && !st && /* @__PURE__ */ jsx("span", { className: "text-[11px] font-extrabold text-slate-600", children: amountLabel(amount) }),
+      badge
+    ] }),
+    onPick && /* @__PURE__ */ jsx("div", { className: "mt-1 flex flex-wrap gap-1 no-print", children: opts.map(([v, txt, on]) => /* @__PURE__ */ jsx(
+      "button",
+      {
+        onClick: () => onPick(v),
+        className: "rounded border px-1.5 py-0.5 text-[10px] font-bold " + (status === v ? `${on} border-transparent text-white shadow` : "border-slate-300 bg-white text-slate-500 hover:bg-slate-100"),
+        children: txt
+      },
+      v
+    )) })
   ] });
-}
-function CtlBtns({ value, onPick, opts }) {
-  return /* @__PURE__ */ jsx("div", { className: "flex flex-wrap justify-center gap-1 no-print", children: opts.map(([v, label, on]) => /* @__PURE__ */ jsx(
-    "button",
-    {
-      onClick: () => onPick(v),
-      className: "rounded-md border px-2 py-0.5 text-[10px] font-bold transition " + (value === v ? `${on} border-transparent text-white shadow` : "border-slate-300 bg-white text-slate-500 hover:bg-slate-100"),
-      children: label
-    },
-    v
-  )) });
 }
 function DayRow({ row, student, onStatus }) {
   const hj = hijriInfo(row.date);
-  const lbl = row.qLo != null && row.qHi > row.qLo ? spanLabel(row.qLo, row.qHi) : null;
-  const st = row.status ? HIFZ_STYLE[row.status] : null;
-  const hifzPick = (v) => onStatus(row.date, "hifz", row.status === v ? null : v);
-  const majorPick = (v) => onStatus(row.date, "major", (row.major && row.major.status) === v ? null : v);
+  const pick = (stream, v) => {
+    const cur = stream === "hifz" ? row.status : row[stream] && row[stream].status;
+    onStatus(row.date, stream, cur === v ? null : v);
+  };
+  const H = [
+    ["saved", "\u062D\u0641\u0638", "bg-emerald-600"],
+    ["missed", "\u0644\u0645 \u064A\u062D\u0641\u0638", "bg-rose-600"],
+    ["absent", "\u063A\u0627\u0626\u0628", "bg-stone-500"]
+  ];
+  const R = [
+    ["done", "\u062A\u0645", "bg-emerald-600"],
+    ["missed", "\u0644\u0645 \u062A\u062A\u0645", "bg-rose-600"],
+    ["absent", "\u063A\u0627\u0626\u0628", "bg-stone-500"]
+  ];
   return /* @__PURE__ */ jsxs("tr", { className: DAY_CELL(row), children: [
     /* @__PURE__ */ jsx("td", { className: "font-bold whitespace-nowrap", children: weekdayName(row.date) }),
     /* @__PURE__ */ jsxs("td", { className: "whitespace-nowrap", children: [
       /* @__PURE__ */ jsx("div", { className: "text-[13px] font-extrabold text-slate-800", children: hj.dm }),
       /* @__PURE__ */ jsx("div", { className: "text-[10px] text-slate-400", children: hj.y }),
-      row.beyondPlan && /* @__PURE__ */ jsx("div", { className: "text-[10px] font-bold text-rose-600", children: "\u064A\u0648\u0645 \u0625\u0636\u0627\u0641\u064A \u0628\u0639\u062F \u0627\u0644\u062E\u0637\u0629" })
-    ] }),
-    /* @__PURE__ */ jsxs("td", { children: [
-      row.empty ? /* @__PURE__ */ jsx("span", { className: "text-slate-400", children: "\u0627\u0643\u062A\u0645\u0644 \u0627\u0644\u0645\u0637\u0644\u0648\u0628 \u2014 \u0644\u0627 \u062C\u062F\u064A\u062F" }) : /* @__PURE__ */ jsxs(Fragment, { children: [
-        /* @__PURE__ */ jsxs("div", { className: "font-bold text-slate-800", children: [
-          "\u0633\u0648\u0631\u0629 ",
-          lbl ? lbl.surah : "\u2014"
-        ] }),
-        /* @__PURE__ */ jsx("div", { className: "text-[11px] text-slate-500", children: lbl ? lbl.range : "" }),
-        (row.status === "missed" || row.status === "absent") && row.rolledToNext > 0 && /* @__PURE__ */ jsxs("div", { className: "mt-0.5 inline-block rounded bg-rose-100 px-1.5 text-[10px] font-bold text-rose-700", children: [
-          "\u21A9 ",
-          amountLabel(row.rolledToNext),
-          " \u064A\u0646\u0632\u0627\u062D \u0644\u063A\u062F\u064D \u2014 \u0628\u062F\u0648\u0646 \u062F\u0645\u062C \u0641\u064A \u064A\u0648\u0645 \u0648\u0627\u062D\u062F"
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxs("div", { className: "mt-0.5 flex flex-wrap items-center gap-1", children: [
-        /* @__PURE__ */ jsx("span", { className: "text-[12px] font-extrabold", children: amountLabel(row.amountQ) }),
-        !row.status && !row.empty && /* @__PURE__ */ jsx("span", { className: "rounded bg-slate-100 px-1.5 text-[10px] font-bold text-slate-500", children: "\u0645\u062C\u062F\u0648\u0644" }),
-        row.shiftedBy > 0 && /* @__PURE__ */ jsxs("span", { className: "rounded bg-amber-100 px-1.5 text-[10px] font-bold text-amber-800", children: [
-          "\u0627\u0644\u062E\u0637\u0629 \u0645\u062A\u0623\u062E\u0631\u0629 ",
-          arNum(row.shiftedBy),
-          " \u064A\u0648\u0645\u064B\u0627 \u2014 \u0627\u0646\u0632\u064A\u0627\u062D\u060C \u0644\u0627 \u062F\u0645\u062C"
-        ] })
+      row.beyondPlan && /* @__PURE__ */ jsx("div", { className: "text-[10px] font-bold text-rose-600", children: "\u064A\u0648\u0645 \u0625\u0636\u0627\u0641\u064A \u0628\u0639\u062F \u0627\u0644\u062E\u0637\u0629" }),
+      row.shiftedBy > 0 && /* @__PURE__ */ jsxs("div", { className: "mt-0.5 rounded bg-amber-100 px-1 text-[9px] font-bold text-amber-800", children: [
+        "\u0645\u062A\u0623\u062E\u0631\u0629 ",
+        arNum(row.shiftedBy),
+        " \u064A\u0648\u0645"
       ] })
     ] }),
-    /* @__PURE__ */ jsx("td", { children: st ? /* @__PURE__ */ jsx("span", { className: "inline-block rounded border px-2 py-0.5 text-xs font-extrabold " + st.cls, children: st.txt }) : /* @__PURE__ */ jsx("span", { className: "text-slate-300", children: "\u2014" }) }),
-    /* @__PURE__ */ jsx("td", { children: /* @__PURE__ */ jsx(
-      CtlBtns,
-      {
-        value: row.status,
-        onPick: hifzPick,
-        opts: [
-          ["saved", "\u062D\u0641\u0638", "bg-emerald-600"],
-          ["missed", "\u0644\u0645 \u064A\u062D\u0641\u0638", "bg-rose-600"],
-          ["absent", "\u063A\u0627\u0626\u0628", "bg-stone-500"]
-        ]
-      }
-    ) }),
     /* @__PURE__ */ jsx(
-      ReviewCell,
+      MarkCell,
       {
-        cell: row.minor,
-        style: REV_STYLE,
-        deferred: "\u2014",
-        dueTxt: "\u0644\u0627 \u0634\u064A\u0621 \u0645\u0633\u062A\u062D\u0642"
+        label: "\u062D\u0641\u0638 \u062C\u062F\u064A\u062F",
+        span: { qLo: row.qLo, qHi: row.qHi },
+        status: row.status,
+        amount: row.amountQ,
+        style: HIFZ_STYLE,
+        deferred: "\u0627\u0646\u0632\u0627\u062D \u0644\u0644\u064A\u0648\u0645 \u0627\u0644\u062A\u0627\u0644\u064A \u0628\u0627\u0644\u0643\u0627\u0645\u0644",
+        dueTxt: row.empty ? "\u0627\u0643\u062A\u0645\u0644 \u0627\u0644\u0645\u062F\u0649 \u2014 \u0644\u0627 \u062C\u062F\u064A\u062F" : "\u2014",
+        onPick: (v) => pick("hifz", v),
+        opts: H,
+        badge: row.rolledToNext > 0 ? /* @__PURE__ */ jsxs("span", { className: "rounded bg-rose-100 px-1.5 text-[10px] font-bold text-rose-700", children: [
+          "\u21A9 ",
+          amountLabel(row.rolledToNext),
+          " \u064A\u0646\u0632\u0627\u062D \u0644\u063A\u062F \u2014 \u0628\u062F\u0648\u0646 \u062F\u0645\u062C"
+        ] }) : null
       }
     ),
-    student.majorEnabled ? /* @__PURE__ */ jsxs(Fragment, { children: [
-      /* @__PURE__ */ jsx(
-        ReviewCell,
-        {
-          cell: row.major,
-          style: REV_STYLE,
-          deferred: "\u0623\u064F\u062C\u0650\u0651\u0644\u062A \u0644\u0644\u064A\u0648\u0645 \u0627\u0644\u062A\u0627\u0644\u064A",
-          dueTxt: "\u0628\u0627\u0646\u062A\u0638\u0627\u0631 \u062D\u0641\u0638 \u062C\u062F\u064A\u062F"
-        }
-      ),
-      /* @__PURE__ */ jsx("td", { className: "align-top", children: /* @__PURE__ */ jsx(
-        CtlBtns,
-        {
-          value: row.major && row.major.status || null,
-          onPick: majorPick,
-          opts: [
-            ["done", "\u062A\u0645\u062A", "bg-violet-600"],
-            ["missed", "\u0644\u0645 \u062A\u062A\u0645", "bg-rose-600"],
-            ["absent", "\u063A\u0627\u0626\u0628", "bg-stone-500"]
-          ]
-        }
-      ) })
-    ] }) : /* @__PURE__ */ jsx("td", { colSpan: 2, className: "text-center align-middle text-[11px] text-slate-400", children: "\u063A\u064A\u0631 \u0645\u0641\u0639\u0651\u0644\u0629" })
+    /* @__PURE__ */ jsx(
+      MarkCell,
+      {
+        label: "\u0645\u0631\u0627\u062C\u0639\u0629 \u0635\u063A\u0631\u0649 (\u062A\u0644\u0642\u0627\u0626\u064A\u0629)",
+        span: row.minor ? { qLo: row.minor.qLo, qHi: row.minor.qHi } : null,
+        status: row.minor && row.minor.status,
+        amount: row.minor && row.minor.plannedQ,
+        preview: row.minor && row.minor.preview,
+        style: REV_STYLE,
+        deferred: "\u0627\u0646\u0632\u0627\u062D\u062A \u0644\u0644\u0635\u0628\u0627\u062D \u0627\u0644\u0642\u0627\u062F\u0645",
+        dueTxt: "\u0644\u0627 \u0634\u064A\u0621 \u0645\u0633\u062A\u062D\u0642",
+        onPick: (v) => pick("minor", v),
+        opts: R
+      }
+    ),
+    student.majorEnabled ? /* @__PURE__ */ jsx(
+      MarkCell,
+      {
+        label: "\u0645\u0631\u0627\u062C\u0639\u0629 \u0643\u0628\u0631\u0649",
+        span: row.major ? { qLo: row.major.qLo, qHi: row.major.qHi } : null,
+        status: row.major && row.major.status,
+        amount: row.major && row.major.plannedQ,
+        preview: row.major && row.major.preview,
+        style: REV_STYLE,
+        deferred: "\u0627\u0646\u0632\u0627\u062D\u062A \u0644\u063A\u062F \u2014 \u0627\u0644\u062D\u0641\u0638 \u0644\u0645 \u064A\u062A\u0623\u062B\u0631",
+        dueTxt: "\u0628\u0627\u0646\u062A\u0638\u0627\u0631 \u062D\u0641\u0638 \u062C\u062F\u064A\u062F",
+        onPick: (v) => pick("major", v),
+        opts: R,
+        badge: row.major && row.major.pendingQ > 0 ? /* @__PURE__ */ jsxs("span", { className: "rounded bg-violet-100 px-1.5 text-[10px] font-bold text-violet-800", children: [
+          "\u0628\u0627\u0644\u0637\u0627\u0628\u0648\u0631 ",
+          amountLabel(row.major.pendingQ)
+        ] }) : null
+      }
+    ) : null
   ] });
 }
 function StudentPlan({ student, settings, onStatus, onClear, onEdit }) {
@@ -643,7 +639,7 @@ function StudentPlan({ student, settings, onStatus, onClear, onEdit }) {
   }, [rows]);
   const pct = totalQ > 0 ? Math.min(100, Math.round(savedQ / totalQ * 100)) : 0;
   const level = LEVELS[student.level] || { label: student.level };
-  const cols = student.majorEnabled ? 8 : 6;
+  const cols = student.majorEnabled ? 5 : 4;
   const dirChip = plan.descending ? { txt: "\u0627\u062A\u062C\u0627\u0647 \u0627\u0644\u062D\u0641\u0638: \u062A\u0646\u0627\u0632\u0644\u064A \u2193 (\u0627\u0644\u0645\u0650\u0631\u0622\u0629 \u0641\u0639\u0651\u0627\u0644\u0629)", cls: "bg-amber-50 text-amber-800 border border-amber-200" } : { txt: "\u0627\u062A\u062C\u0627\u0647 \u0627\u0644\u062D\u0641\u0638: \u062A\u0635\u0627\u0639\u062F\u064A \u2191 (\u0639\u0627\u062F\u064A\u060C \u0628\u062F\u0648\u0646 \u0645\u0631\u0622\u0629)", cls: "bg-emerald-50 text-emerald-800 border border-emerald-200" };
   return /* @__PURE__ */ jsxs("section", { className: "card p-4", "aria-label": `\u062E\u0637\u0629 ${student.name}`, children: [
     /* @__PURE__ */ jsxs("div", { className: "mb-3 flex flex-wrap items-start justify-between gap-2 border-b-2 border-slate-200 pb-3", children: [
@@ -698,6 +694,12 @@ function StudentPlan({ student, settings, onStatus, onClear, onEdit }) {
       /* @__PURE__ */ jsx(Stat, { label: "\u0623\u064A\u0627\u0645 \u0645\u062C\u062F\u0648\u0644\u0629 \u0645\u062A\u0628\u0642\u064A\u0629", value: arNum(stats.pending), cls: "border-sky-200 bg-sky-50 text-sky-800" }),
       /* @__PURE__ */ jsx(Stat, { label: "\u0627\u0644\u0645\u062D\u0641\u0648\u0638", value: `${arDec(savedQ / QPP)} / ${arDec(totalQ / QPP)}`, cls: "border-slate-300 bg-slate-50 text-slate-700" })
     ] }),
+    (stats.minorDone > 0 || stats.minorMissed > 0) && /* @__PURE__ */ jsx("div", { className: "mb-2 flex flex-wrap gap-2 text-[11px] font-bold text-sky-700", children: /* @__PURE__ */ jsxs("span", { className: "rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5", children: [
+      "\u0635\u063A\u0631\u0649 \u2014 \u062A\u0645\u062A: ",
+      arNum(stats.minorDone),
+      " \xB7 \u0644\u0645 \u062A\u062A\u0645: ",
+      arNum(stats.minorMissed)
+    ] }) }),
     student.majorEnabled && /* @__PURE__ */ jsx("div", { className: "mb-3 flex flex-wrap gap-2 text-[11px] font-bold text-violet-700", children: /* @__PURE__ */ jsxs("span", { className: "rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5", children: [
       "\u0643\u0628\u0631\u0649 \u2014 \u062A\u0645\u062A: ",
       arNum(stats.major.saved),
@@ -724,17 +726,18 @@ function StudentPlan({ student, settings, onStatus, onClear, onEdit }) {
           "\u0627\u0644\u062A\u0627\u0631\u064A\u062E ",
           /* @__PURE__ */ jsx("span", { className: "text-[10px] font-bold text-slate-500", children: "(\u0647\u062C\u0631\u064A)" })
         ] }),
-        /* @__PURE__ */ jsx("th", { children: "\u0627\u0644\u062D\u0641\u0638 \u0627\u0644\u062C\u062F\u064A\u062F" }),
-        /* @__PURE__ */ jsx("th", { children: "\u062D\u0627\u0644\u0629 \u0627\u0644\u062D\u0641\u0638" }),
-        /* @__PURE__ */ jsx("th", { children: "\u062A\u062D\u0643\u0645 \u0627\u0644\u062D\u0641\u0638" }),
-        /* @__PURE__ */ jsxs("th", { className: "!bg-sky-50", children: [
-          "\u0645\u0631\u0627\u062C\u0639\u0629 \u0635\u063A\u0631\u0649 ",
-          /* @__PURE__ */ jsx("span", { className: "text-[9px] font-bold text-sky-600", children: "(\u062A\u0644\u0642\u0627\u0626\u064A\u0629)" })
+        /* @__PURE__ */ jsxs("th", { children: [
+          "\u0627\u0644\u062D\u0641\u0638 ",
+          /* @__PURE__ */ jsx("span", { className: "text-[9px] font-bold text-slate-500", children: "(\u062A\u0633\u062C\u064A\u0644 \u0645\u0633\u062A\u0642\u0644)" })
         ] }),
-        student.majorEnabled ? /* @__PURE__ */ jsxs(Fragment, { children: [
-          /* @__PURE__ */ jsx("th", { className: "!bg-violet-50", children: "\u0645\u0631\u0627\u062C\u0639\u0629 \u0643\u0628\u0631\u0649" }),
-          /* @__PURE__ */ jsx("th", { className: "!bg-violet-50", children: "\u062A\u062D\u0643\u0645 \u0627\u0644\u0643\u0628\u0631\u0649" })
-        ] }) : /* @__PURE__ */ jsx("th", { colSpan: 2, children: "\u0627\u0644\u0645\u0631\u0627\u062C\u0639\u0629 \u0627\u0644\u0643\u0628\u0631\u0649 \u2014 \u0645\u0639\u0637\u0651\u0644\u0629 \u0644\u0647\u0630\u0627 \u0627\u0644\u0637\u0627\u0644\u0628" })
+        /* @__PURE__ */ jsxs("th", { className: "!bg-sky-50", children: [
+          "\u0627\u0644\u0635\u063A\u0631\u0649 ",
+          /* @__PURE__ */ jsx("span", { className: "text-[9px] font-bold text-sky-600", children: "(\u062A\u0644\u0642\u0627\u0626\u064A\u0629 \u0645\u0646 \u0627\u0644\u0623\u0645\u0633)" })
+        ] }),
+        student.majorEnabled ? /* @__PURE__ */ jsxs("th", { className: "!bg-violet-50", children: [
+          "\u0627\u0644\u0643\u0628\u0631\u0649 ",
+          /* @__PURE__ */ jsx("span", { className: "text-[9px] font-bold text-violet-600", children: "(\u0627\u062E\u062A\u064A\u0627\u0631\u064A\u0629)" })
+        ] }) : null
       ] }) }),
       /* @__PURE__ */ jsxs("tbody", { children: [
         weeks.length === 0 && /* @__PURE__ */ jsx("tr", { children: /* @__PURE__ */ jsx("td", { colSpan: cols, className: "py-6 text-slate-400", children: "\u0644\u0627 \u062A\u0648\u062C\u062F \u0623\u064A\u0627\u0645 \u0641\u064A \u0647\u0630\u0647 \u0627\u0644\u0641\u062A\u0631\u0629 \u2014 \u0639\u062F\u0651\u0644 \u062A\u0648\u0627\u0631\u064A\u062E \u0627\u0644\u0628\u062F\u0627\u064A\u0629/\u0627\u0644\u0646\u0647\u0627\u064A\u0629." }) }),

@@ -203,18 +203,44 @@ ok('reverse-range: any two surahs, descending plan, mirrored engine verified (di
 }
 ok('ascending (from<=to) NEVER mirrors; legacy flat statuses compatible');
 
-/* 15. minor review = automatic feed from yesterday's saved hifz */
+/* 15. minor review: auto-fed from yesterday's save; own independent marks */
 {
   const se = { startDate: '2026-09-20', endDate: '2026-09-23', holidays: '' };
-  const p = buildPlan({ from: 1, to: 114, dailyHifz: 0.5, statuses: { '2026-09-20': { hifz: 'saved' } } }, se);
-  const days = p.rows.filter((r) => r.type === 'day');
+  let p = buildPlan({ from: 1, to: 114, dailyHifz: 0.5, statuses: { '2026-09-20': { hifz: 'saved' } } }, se);
+  let days = p.rows.filter((r) => r.type === 'day');
   assert.ok(!days[0].minor || !days[0].minor.plannedQ, 'no minor before any save');
-  assert.equal(days[1].minor.plannedQ, 2, "day 2 minor = day 1's saved 2 quarters — automatic");
-  assert.equal(days[1].minor.status, 'done', 'minor is auto-satisfied (teacher never marks it)');
+  assert.equal(days[1].minor.plannedQ, 2, "day 2 minor = day 1's saved 2 quarters — automatic feed");
+  assert.equal(days[1].minor.status, null, 'unmarked minor stays for the teacher to mark (تم/لم تتم)');
+  assert.equal(days[1].minor.preview, false, 'fed from a REAL save -> not a preview');
   assert.deepEqual([days[1].minor.qLo, days[1].minor.qHi], [0, 2]);
-  assert.ok(!days[2].minor || days[2].minor.preview, 'day 3 has no real minor (nothing saved on day 2)');
+
+  // teacher marks «تم» next day
+  p = buildPlan({ from: 1, to: 114, dailyHifz: 0.5, statuses: { '2026-09-20': { hifz: 'saved' }, '2026-09-21': { minor: 'done' } } }, se);
+  days = p.rows.filter((r) => r.type === 'day');
+  assert.equal(days[1].minor.status, 'done', 'teacher can mark «تم»');
+
+  // «لم تتم» in minor slides ONLY minor — hifz & major untouched
+  p = buildPlan({
+    from: 1, to: 114, dailyHifz: 0.5,
+    statuses: {
+      '2026-09-20': { hifz: 'saved' },
+      '2026-09-21': { hifz: 'saved', minor: 'missed' },
+    },
+  }, se);
+  days = p.rows.filter((r) => r.type === 'day');
+  assert.equal(days[1].hifz === undefined ? days[1].status : null, 'saved', 'hifz mark intact');
+  assert.equal(days[1].minor.status, 'missed');
+  // day 22: minor re-runs the same slice (slide), NOT double work
+  assert.equal(days[2].minor.plannedQ, 2, 'tomorrow = the same deferred dose (one dose/day, no merge)');
+  assert.deepEqual([days[2].minor.qLo, days[2].minor.qHi], [0, 2], 'the deferred Al-Fatiha slice comes back');
+  assert.equal(days[2].status, null, 'hifz stream unaffected by minor miss');
+  assert.equal(p.savedQ, 4, 'hifz progress untouched by minor marks');
+  // preview minor (content projected, not yet saved) is flagged
+  p = buildPlan({ from: 1, to: 114, dailyHifz: 0.5, statuses: {} }, se);
+  days = p.rows.filter((r) => r.type === 'day');
+  assert.equal(days[1].minor.preview, true, 'scheduled (unmarked) content shows as preview');
 }
-ok('minor review auto-built from yesterday hifz (no manual entry)');
+ok('minor: auto feed from yesterday + independent تم/لم تتم slides only itself');
 
 /* 16. major = optional independent shift stream */
 {
