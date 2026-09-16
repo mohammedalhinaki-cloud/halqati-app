@@ -77,13 +77,16 @@ if (/لا يوجد:\s*١/.test(bodyTxt())) ok('stats chip counts «لا يوجد
 else bad('stats chip does not count the new mark');
 
 /* the slot burned on day 1 must re-run on day 2 (slide, never merge):
-   day 2 (2026-09-21) must now point at the الناس span again — its «تم» mark
-   from the seed now applies to slot 0 (qHi at the mushaf end). */
+   day 2 (2026-09-21) must show the FIRST descending ride slice again — the
+   آخر المصحف slice (الناس), the exact same ayah range day 1 had. */
 const p = await import('../lib/plan.js');
+const { rangeLabel } = await import('../lib/quran.js');
 const plan = p.buildPlan(s2a, after.settings);
 const d2 = plan.rows.filter((r) => r.type === 'day')[1];
-if (d2.major.qHi === 2416) ok('day 2 re-runs slot 0 (الناس) — ride slid one day, nothing merged');
-else bad(`day 2 major span wrong: [${d2.major.qLo},${d2.major.qHi}]`);
+const d2Lab = d2.major.gFrom != null ? rangeLabel(d2.major.gFrom, d2.major.gTo).head + ' ' + rangeLabel(d2.major.gFrom, d2.major.gTo).detail : '—';
+const first = plan.rows.filter((r) => r.type === 'day' && r.major && r.major.gFrom != null)[0];
+if (d2.major.gFrom === 6236 && d2.major.gTo === 6233) ok(`day 2 re-runs the first ride slice (${d2Lab}) — ride slid one day, nothing merged`);
+else bad(`day 2 major range wrong: ${d2Lab} [${d2.major.gFrom}..${d2.major.gTo}]`);
 
 /* toggling the SAME button again clears the mark */
 const noneBtns2 = $$('button').filter((b) => b.textContent.trim() === 'لا يوجد');

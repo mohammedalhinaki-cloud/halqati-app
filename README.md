@@ -2,23 +2,32 @@
 
 A simple, fast, single-page tracker for Quran memorization halaqas — modeled on the official
 Tahfiz-association follow-up cards (بطاقة متابعة الحفظ والمراجعة). RTL Arabic, Tailwind, no backend:
-evethrsists in the browser via `localStorage`.
+persists in the browser via `localStorage`.
 
-Next.js 14 (Ajs Router) → **static export**, deployed **only** via GitHub Pages ( Pageel(see bel Features
+Next.js 14 (App Router) → **static export**, deployed **only** via GitHub Pages (see below).
 
-- **Dates shown in Hijri (Umm al-Qura, Saudi official calendar)** everywhere — plan table, weablbands and holiday rows display e.g. "٩ ربيع الآخر ١٤٤٨هـ"; the settings date inputs are nativeareGregorian controls with the Hijri equivalent previewed live right under them.
-  (`YYYY-MM-DD`, comma-separated). Working days are fixed **Sunday–Wednesday**;
+## Features
+
+- **Dates shown in Hijri (Umm al-Qura, Saudi official calendar)** everywhere — the plan table,
+  week bands and holiday rows display e.g. "٩ ربيع الآخر ١٤٤٨هـ"; the settings date inputs stay
+  native Gregorian controls with the Hijri equivalent previewed live right under them.
+  Working days are fixed **Sunday–Wednesday**;
   holidays are skipped automatically and shown as a dark «إجازة» band like the paper card.
 - **Unlimited students** per halaqa, with: name, guardian phone, level
   (ابتدائي / متوسط / ثانوي), halaqa name, daily **hifz** amount
   (¼ / ½ / ¾ / 1 / 1½ face), *sughra* & *kubra* daily review, and a from/to surah
   range (defaults: **Al-Fatiha → An-Nas**, i.e. the full 604-face mushaf).
 - **Accurate Madinah-mushaf math:** every amount maps to exact quarter-faces
-  (¼ وجه ≈ 4 lines of 15 per page). Surah/ ayah spans per day are computed from real
-  Tanzil/Quran.com pagination data (see *Data* below).
-- **Smart rollover:** each day has 3 buttons — حفظ | لم يحفظ | غائب. Marking
-  *لم يحفظ* or *غائب* moves that day's full amount (including any inherited carry) to the next
-  working day, cascading as needed — even beyond the plan end (auto-extended days are flagged).
+  (¼ وجه ≈ 4 lines of 15 per page), and every day's span is resolved to **complete ayahs**
+  (سورة/آية) from the pinned QCF4 + Tanzil data (see *Data & accuracy notes* below) —
+  the day is labelled with the exact ayahs it covers, e.g. «سورة الفلق — الآيات ١ – ٥» or
+  «الفلق ← الناس — من الفلق آية ٥ إلى الناس آية ٣».
+- **Smart rollover (shift, never merge):** each day has 3 buttons — حفظ | لم يحفظ | غائب.
+  Marking *لم يحفظ* or *غائب* keeps that day's own range visible and re-runs the exact same
+  ayah range on the next working day; the whole plan slides (even beyond the plan end —
+  auto-extended days are flagged). No two ranges are ever merged into one day, and no ayah is
+  ever skipped. Minor review slides the same way on *لم تتم / غائب*, and major review on
+  *لم تتم / غائب / لا يوجد*.
 - **Stats:** saved / not-saved / absent / remaining days counts, faces saved vs. total, progress bar,
   per-week «نتيجة الفترة» summary rows.
 - One-click **print** → the table prints clean, like the official card.
@@ -27,11 +36,13 @@ Next.js 14 (Ajs Router) → **static export**, deployed **only** via GitHub Page
 
 ```bash
 npm install
-npm run dev     # http://localhost:3000
-npm run build   # static export in ./out
-npm test          # plan-logic checks (10)
-npm run test:ui   # render smoke test (real React components)
-npm run test:all  # both
+npm run dev         # http://localhost:3000
+npm run build       # static export in ./out
+npm run gen         # rebuild the Quran dataset from data/sources/ and run the 19 checks
+npm test            # Quran-data checks + planner checks (exact day-by-day ranges)
+npm run test:ui     # render smoke test (real React components, exact ranges asserted)
+npm run test:all    # everything incl. build, DOM, SQLite and native smoke tests
+npm run plan -- --from 110 --to 114 --daily 0.25   # print the exact day-by-day table
 ```
 
 ## Deploy to GitHub Pages (official & only deploy target)
@@ -43,21 +54,49 @@ npm run test:all  # both
 2. Pages needs a **public repo** (or GitHub Pro). Then the site is at
    `https://<owner>.github.io/halqati-app/` (matches the committed `basePath: '/halqati-app'`).
 
-## Data & accuracy notes
+## Data & accuracy notes (every range is verified before it is shown)
 
-- Verse→page/line layout: **QCF4 database** (King Fahd Complex, Madinah Mushaf 1441H),
-  verified at build time against **Quran.com API** pagination for anchors like
-  2:1 (p2), 46:1 (p502), 67:1 (p562), 78:1 (p582), 112:1 (p604). Both follow the same
-  604-page Madinah numbering.
-- Regenerate data after cloning: `npm run gen` (sources kept under `data/`, output
-  committed at `lib/quran-data.js`).
-- ⚠️ The spec figure "Al-Ahqaf → An-Nas = 88 faces" traces to counting from page 517;
-  Al-Ahqaf actually begins on **page 502**. The app therefore computes the truthful
-  **102.5 faces** (410 quarter-faces) from real data. Change `from: 46` on a student if
-  you want a different range.
-- On the official card the daily minima are ٧ أسطر (ibtida'i) / ١١ سطر (mutawassit) /
-  وجه كامل (thanawi) — consistent with **1 وجه = 1 full page (15 lines)**, which is the
-  unit used here.
+The app never guesses a verse number and never derives one from a language model. All Quran
+data is generated from pinned, checksummed sources and cross-checked by automated tests:
+
+- **Sources** (`data/sources/`, each pinned by sha256 in `sources.lock.json`; the build aborts
+  on any mismatch):
+  - **QCF4 / QPC Hafs** glyph database — King Fahd Complex, Madinah Mushaf 1441H
+    (`qcf4-verses.json`, `qcf4-index.json`): page + line of every one of the 6236 ayahs.
+  - **Tanzil** metadata, CC-BY (`tanzil-quran-data.xml`): 114 surah names, ayah counts,
+    juz/hizb/rub' / page boundaries.
+  - **Quran.com API** page anchors (`quran-com-api-anchors.json`): verbatim verse lists for
+    pages 1, 2, 49, 50, 502, 582, 604 (page 604 = الإخلاص ١–٤ + الفلق ١–٥ + الناس ١–٦).
+  - **Glyph page samples** (`qcf4-pages-sample/`) for 6 pages: per-word verse keys + line
+    numbers, used to verify the per-ayah page/line model.
+  - `page-model-notes.json` documents (and pins) the only known deviations: 6 stale
+    last-page fields in the QCF4 index and 56 ±1-page entries in Tanzil's older print.
+- **Build & verification:** `npm run gen` re-reads the sources and runs **19 cross-source
+  checks** — Tanzil ⇄ QCF4 both report 114 surahs / 6236 ayahs with identical names, the
+  604 pages tile the mushaf, quarter positions are monotonic (0 → 2416 = 604 faces), every
+  surah starts on the page the sources agree on, the 7 Quran.com page anchors match, and the
+  glyph sample pages agree with the per-ayah table. The report is written to
+  `data/quran-verification.json`; outputs are `lib/quran-data.js` + `data/quran.json`
+  (single generated source of truth for the whole app).
+- **Planning in whole-ayah space:** `lib/quran.js` addresses ayahs exactly
+  (`globalAyah(surah, ayah)` throws on `الفلق ٦` / `النصر ٤` / anything out of the mushaf —
+  nothing is clamped). A day's range is a run of complete, contiguous ayahs; an ayah is never
+  split, a range never exceeds its surah's ayah count, and surah transitions know both the
+  last ayah of the surah being left and the first ayah of the one being entered (the label
+  says «الفلق ← الناس — من الفلق آية ٥ إلى الناس آية ٣»).
+- **The table is audited before display:** `buildPlan` re-checks every range, the slice
+  chain (strict order, no gap, no repetition), saved-progress continuity and the review
+  streams; if the audit fails it **throws** and the UI shows «تعذّر عرض الجدول» instead of a
+  wrong table.
+- **Tests:** `npm test` runs `test-quran-data.mjs` (sources → dataset, 114 surahs and their
+  real ayah counts, addressing, quarter accounting, day-splitting, labels, legacy-pin
+  migration, page anchors, regressions) followed by `test-plan.mjs` (exact day-by-day
+  tables, missed/absent slide, minor/major review, manual pins, extension days, the full
+  1→114 and 114→1 mushaf coverage, auditor self-tests). `npm run test:all` adds the UI,
+  click, SQLite, static-build and native smoke tests.
+- **Legacy manual pins** saved by the old quarter-face model are migrated only when the old
+  span lines up exactly with one ayah's first/last quarter; ambiguous pins are dropped with a
+  visible note asking the teacher to re-pin (never rounded, never guessed).
 
 ## Persistence & privacy
 
@@ -74,8 +113,9 @@ Nothing ever leaves the device — no backend, no Supabase, no cloud:
 One persistence facade (`lib/persist.js`) picks the backend at runtime
 (`window.Capacitor.isNativePlatform()`); the SQL schema and state↔rows mapping
 (`lib/sqlite-backend.js`) is the exact code the test suite runs against sql.js
-(SQLite compiled to WASM). Seed demo data (2 students from Al-Ahqaf, including a missed
-day that visibly cascades) is loaded on first launch in both backends.
+(SQLite compiled to WASM). Seed demo data (2 students memorising the full mushaf
+الفاتحة ← الناس, including a missed day that visibly slides) is loaded on first launch in
+both backends.
 
 ## Layout
 
@@ -87,9 +127,11 @@ lib/                 quran.js (mushaf math + Arabic labels), plan.js (calendar +
                      reducers.js (pure state mutations), persist.js (storage facade:
                      SQLite on Android / localStorage on web), sqlite-backend.js (schema
                      + state↔rows), native-sqlite.js (Capacitor bridge adapter)
-scripts/             gen-quran.mjs (data pipeline), render-test.mjs, test-plan.mjs,
-                     sqlite-persist.test.mjs, native-e2e.test.mjs, gen-android-icons.mjs
-data/                raw source JSONs for regeneration
+scripts/             build-quran-data.mjs (data pipeline), quran-checks.mjs (the 19
+                     checks), test-quran-data.mjs, test-plan.mjs, render-test.mjs,
+                     click-none-test.mjs, sqlite-persist.test.mjs, native-e2e.test.mjs
+data/                quran.json + quran-verification.json (generated)
+data/sources/        pinned Quran sources + sources.lock.json (sha256 of each)
 capacitor.config.json  Capacitor config (app id com.halqati.app, webDir out/)
 android/             native Android project (Capacitor + SQLite plugin, branded icons)
 ```

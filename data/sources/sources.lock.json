@@ -1,0 +1,50 @@
+{
+  "note": "sha256 of every pinned Quran source. A mismatch aborts `npm run gen` until this file is updated after a verified source change.",
+  "updated": "2026-09-16",
+  "sources": {
+    "tanzil": {
+      "file": "data/sources/tanzil-quran-data.xml",
+      "sha256": "423afa57b81ccee79a4f15a2df1b8aa6a6c06498cfe8ce12e627adc41512c4a9"
+    },
+    "qcf4Index": {
+      "file": "data/sources/qcf4-index.json",
+      "sha256": "c98bdb05fbf0fc3ac56a97547fe2d9df63f7aeb643fb907a58af664cd2ed4be5"
+    },
+    "qcf4Verses": {
+      "file": "data/sources/qcf4-verses.json",
+      "sha256": "c69036a817e861492a4a585595521dc5c01dcc1eacefdff5f54fbfd642567218"
+    },
+    "apiAnchors": {
+      "file": "data/sources/quran-com-api-anchors.json",
+      "sha256": "38d21238eed85b156875e2dc4643012dadfe57a545c864628c2cbb01b2974b3e"
+    },
+    "pageModelNotes": {
+      "file": "data/sources/page-model-notes.json",
+      "sha256": "ae778d03b8def2f419f2bd4640466143c2811900a03beed43fe18c4feb9e1acb"
+    },
+    "page001": {
+      "file": "data/sources/qcf4-pages-sample/001.json",
+      "sha256": "354ca00d091de4d6005d5c9c0512e7c942c4ef08ed36a0312213ef4107efdfa8"
+    },
+    "page002": {
+      "file": "data/sources/qcf4-pages-sample/002.json",
+      "sha256": "88270e9f94d999fa3d147ade6cc82b29128b839a73be43bebbe7dde49538842f"
+    },
+    "page049": {
+      "file": "data/sources/qcf4-pages-sample/049.json",
+      "sha256": "db8649d70358dfb1e24bac68f19edac8ff25e4ebc701f86faa53e3d1cd291ac8"
+    },
+    "page050": {
+      "file": "data/sources/qcf4-pages-sample/050.json",
+      "sha256": "3e646cebce83eedc07c15ac79aa1a76b392d96adeb6073ed72aaab3c000afafa"
+    },
+    "page582": {
+      "file": "data/sources/qcf4-pages-sample/582.json",
+      "sha256": "ba6ac22d69d8caa4fb3a8674e9d63c8547c2d2c450f908d14031cdd02192292a"
+    },
+    "page604": {
+      "file": "data/sources/qcf4-pages-sample/604.json",
+      "sha256": "5a4f38a63387305d91f168692a8819ae5e46400c4a9cf3c0292984b1559d8e68"
+    }
+  }
+}

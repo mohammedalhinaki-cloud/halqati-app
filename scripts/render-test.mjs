@@ -7,6 +7,8 @@ import SettingsCard from '../components/SettingsCard.jsx';
 import AddStudentForm from '../components/AddStudentForm.jsx';
 import StudentTabs from '../components/StudentTabs.jsx';
 import { seedState } from '../lib/store.js';
+import { buildPlan } from '../lib/plan.js';
+import { rangeLabel, ayahRef } from '../lib/quran.js';
 
 const db = seedState();
 const s1 = db.students[0]; // has saved/missed/absent demo marks
@@ -45,4 +47,44 @@ for (const t of ["أحمد بن محمد العتيبي","لم يحفظ","إجا
 const rowCount = (html.match(/<tr/g) || []).length;
 console.log(`  table rows (incl. bands/legend): ${rowCount}`);
 if (rowCount < 30) { fail++; console.error('too few rows'); }
+
+/* the table must render EXACTLY the ayah ranges the planner derives from the
+   verified data — the label is never re-derived or rounded in the component */
+const text = plain.replace(/<[^>]+>/g, ''); // plain text, tags stripped
+for (const st of db.students) {
+  let plan;
+  try {
+    plan = buildPlan(st, db.settings);
+  } catch (e) {
+    fail++;
+    console.error(`buildPlan failed for ${st.name}:`, e.message);
+    continue;
+  }
+  const dayRows = plan.rows.filter((r) => r.type === 'day' && r.gFrom != null);
+  for (const r of dayRows.slice(0, 5)) {
+    const L = rangeLabel(r.gFrom, r.gTo);
+    const want = `سورة ${L.head} ${L.detail}`;
+    if (text.includes(want)) console.log('  ✓ render shows', JSON.stringify(want));
+    else {
+      fail++;
+      console.error('MISSING exact day range in rendered HTML:', want);
+    }
+  }
+  // a day that finishes a surah / opens a surah must carry the exact annotation
+  const crossEnd = dayRows.find((r) => rangeLabel(r.gFrom, r.gTo).inRangeSurahEnds.length);
+  if (crossEnd) {
+    const e = rangeLabel(crossEnd.gFrom, crossEnd.gTo).inRangeSurahEnds[0];
+    if (text.includes(`ختام ${e.name} —`)) console.log('  ✓ «ختام السورة» chip rendered for', e.name);
+    else { fail++; console.error('«ختام السورة» chip missing for', e.name); }
+  }
+  const crossStart = dayRows.find((r) => rangeLabel(r.gFrom, r.gTo).inRangeSurahStarts.length);
+  if (crossStart) {
+    const e0 = rangeLabel(crossStart.gFrom, crossStart.gTo).inRangeSurahStarts[0];
+    if (text.includes(`بداية ${e0.name} —`)) console.log('  ✓ «بداية السورة» chip rendered for', e0.name);
+    else { fail++; console.error('«بداية السورة» chip missing for', e0.name); }
+  }
+  if (text.includes('تدقيق آلي') && text.includes('مدى آيات متحقَّق منه قبل العرض')) console.log('  ✓ audit chip rendered (كل مدى مُدقَّق قبل العرض)');
+  else { fail++; console.error('audit chip missing'); }
+  console.log(`  ${st.name}: ${plan.rows.filter((r) => r.type === 'day').length} يوم · المدى ${plan.range.first.name} ← ${plan.range.last.name} · ${plan.audit.checked} مدى مُدقَّق`);
+}
 process.exit(fail ? 1 : 0);
