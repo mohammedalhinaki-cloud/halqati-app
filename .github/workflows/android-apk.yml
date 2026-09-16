@@ -15,9 +15,6 @@ on:
 permissions:
   contents: read
 
-env:
-  ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
-
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -41,16 +38,22 @@ jobs:
       - name: Sync Capacitor Android (copies web assets + native plugins)
         run: npx cap sync android
 
-      - name: Set up Android SDK (command-line tools)
-        uses: android-actions/setup-android@v3
-
-      - name: Install required SDK packages
+      - name: Install required SDK packages (uses the runner's preinstalled SDK)
         run: |
-          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --install \
-            "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKM="$(ls "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager "$ANDROID_HOME"/bin/sdkmanager 2>/dev/null | head -1 || true)"
+          if [ -z "$SDKM" ]; then
+            # Fallback: install command-line tools from the official source
+            mkdir -p "$ANDROID_HOME/cmdline-tools"
+            curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/clt.zip
+            (cd "$ANDROID_HOME/cmdline-tools" && unzip -q /tmp/clt.zip && mv cmdline-tools latest)
+            SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+          "$SDKM" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Write local.properties
-        run: echo "sdk.dir=${ANDROID_SDK_ROOT}" > android/local.properties
+        run: echo "sdk.dir=${ANDROID_HOME:-/usr/local/lib/android/sdk}" > android/local.properties
 
       - name: Build debug APK
         working-directory: android
