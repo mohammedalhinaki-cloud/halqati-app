@@ -5,15 +5,9 @@ import AddStudentForm from '../components/AddStudentForm';
 import StudentTabs from '../components/StudentTabs';
 import StudentPlan from '../components/StudentPlan';
 import { STORAGE_KEY, seedState } from '../lib/store';
-import { META, SURAHS } from '../lib/quran';
-import { arDec, arNum } from '../lib/quran';
-import { formatHijri, todayISO } from '../lib/hijri.js';
-
-const FULL_QURAN_FACES = (SURAHS[SURAHS.length - 1].endQ - SURAHS[0].startQ) / META.quartersPerPage;
 
 export default function Home() {
   const [db, setDb] = useState(null);
-  const [todayH, setTodayH] = useState('—');
 
   useEffect(() => {
     let loaded = null;
@@ -50,11 +44,6 @@ export default function Home() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
     } catch {}
   }, [db]);
-
-  // today's Hijri date chip (client-only to avoid build-time hydration mismatch)
-  useEffect(() => {
-    if (typeof window !== 'undefined') setTodayH(formatHijri(todayISO()));
-  }, []);
 
   // No service worker by design: the deployed sw.js self-destructs (purges
   // caches + unregisters). Here we only sweep away any worker a previous
@@ -135,7 +124,7 @@ export default function Home() {
       <div className="mx-auto max-w-6xl space-y-4 px-3 py-5 sm:px-6">
         {/* official-looking header band */}
         <header className="card overflow-hidden">
-          <div className="grid grid-cols-1 items-center gap-2 bg-slate-800 px-4 py-3 text-white sm:grid-cols-3">
+          <div className="grid grid-cols-1 items-center gap-2 bg-slate-800 px-4 py-3 text-white sm:grid-cols-2">
             <div className="text-[11px] leading-5 opacity-90">
               المملكة العربية السعودية
               <br />
@@ -145,14 +134,7 @@ export default function Home() {
             </div>
             <h1 className="text-center text-xl font-extrabold leading-7 sm:text-2xl">
               بطاقة متابعة الحفظ والمراجعة
-              <span className="block text-[13px] font-bold opacity-80">استمارة إلكترونية · الفصل الدراسي الأول ١٤٤٨هـ</span>
-              <span className="block text-[11px] font-normal opacity-70">نسخة الموقع <b>{process.env.NEXT_PUBLIC_BUILD}</b> · اليوم: {todayH}</span>
             </h1>
-            <div className="text-[11px] leading-5 opacity-90 sm:text-left" dir="ltr">
-              Madinah mushaf pagination
-              <br />
-              {META.pages} pages · {META.totalQuarters} quarter-faces · data: Tanzil/Quran.com (QCF4)
-            </div>
           </div>
         </header>
 
@@ -168,11 +150,6 @@ export default function Home() {
           </>
         )}
 
-        <footer className="pb-6 text-center text-[11px] leading-5 text-slate-400">
-          كل شيء محفوظ محليًا في متصفحك (localStorage) — بدون خادم. حساب الأوجه مبني على ترقيم مصحف المدينة (Tanzil / Quran.com):
-          القرآن كاملاً (الفاتحة ← الناس) = <b className="text-slate-500">{arDec(FULL_QURAN_FACES)} وجهًا</b> (من صفحة {arNum(SURAHS[0].page)} إلى صفحة {arNum(META.pages)}).
-          المدى لكل طالب قابل للتعديل عند الإضافة — والافتراض حفظ المصحف كاملاً.
-        </footer>
       </div>
     </main>
   );
