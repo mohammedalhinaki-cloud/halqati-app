@@ -4,57 +4,44 @@ import SettingsCard from '../components/SettingsCard';
 import AddStudentForm from '../components/AddStudentForm';
 import StudentTabs from '../components/StudentTabs';
 import StudentPlan from '../components/StudentPlan';
-import { STORAGE_KEY, seedState } from '../lib/store';
-
-// localStorage migration: legacy level values → current 8-level names
-const migrateLevel = (lv) => {
-  if (lv === 'ابتدائي' || lv === 'ibtida-i') return 'الأول';
-  if (lv === 'mutawassit') return 'متوسط';
-  if (lv === 'thanawi') return 'ثانوي';
-  return lv;
-};
-const migrateDb = (db) =>
-  db && Array.isArray(db.students)
-    ? { ...db, students: db.students.map((s) => ({ ...s, level: migrateLevel(s.level) })) }
-    : db;
+import { seedState, loadState, saveState } from '../lib/persist';
+import * as R from '../lib/reducers';
 
 export default function Home() {
   const [db, setDb] = useState(null);
 
   useEffect(() => {
-    let loaded = null;
-    try {
-      loaded = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    } catch {}
-    setDb(loaded && loaded.settings && Array.isArray(loaded.students) ? loaded : seedState());
-    if (typeof window !== 'undefined') window.__appBooted = true; // cancel the 3s fallback banner
+    let cancelled = false;
+    loadState().then(
+      (st) => {
+        if (cancelled) return;
+        setDb(st);
+        if (typeof window !== 'undefined') window.__appBooted = true; // cancel the 3s fallback banner
+      },
+      () => {
+        if (cancelled) return;
+        setDb(seedState());
+        if (typeof window !== 'undefined') window.__appBooted = true;
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // extra failsafe: if state is somehow still unset after 3s, boot with seed anyway
   useEffect(() => {
     const t = setTimeout(() => {
-      setDb((s) => {
-        if (!s) {
-          try {
-            const raw = migrateDb(JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'));
-            return raw && raw.settings ? raw : seedState();
-          } catch {
-            return seedState();
-          }
-        }
-        return s;
-      });
+      setDb((s) => s || seedState());
       if (typeof window !== 'undefined') window.__appBooted = true;
     }, 3000);
     return () => clearTimeout(t);
   }, []);
 
-
+  // persist every change — SQLite file on Android, localStorage on the web
   useEffect(() => {
     if (!db) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-    } catch {}
+    saveState(db);
   }, [db]);
 
   // No service worker by design: the deployed sw.js self-destructs (purges
@@ -71,62 +58,13 @@ export default function Home() {
     }
   }, []);
 
-  const setSettings = useCallback((patch) => setDb((s) => ({ ...s, settings: { ...s.settings, ...patch } })), []);
-  const addStudent = useCallback((st) => setDb((s) => ({ ...s, students: [...s.students, st], activeId: st.id })), []);
-  const removeStudent = useCallback(
-    (id) =>
-      setDb((s) => {
-        const students = s.students.filter((x) => x.id !== id);
-        const activeId = s.activeId === id ? students[0]?.id || null : s.activeId;
-        return { ...s, students, activeId };
-      }),
-    []
-  );
-  const editStudent = useCallback(
-    (id, patch) => setDb((s) => ({ ...s, students: s.students.map((x) => (x.id === id ? { ...x, ...patch } : x)) })),
-    []
-  );
-  const setStatus = useCallback(
-    (sid, date, stream, status) =>
-      setDb((s) => ({
-        ...s,
-        students: s.students.map((st) => {
-          if (st.id !== sid) return st;
-          const statuses = { ...st.statuses };
-          let cur = statuses[date];
-          if (typeof cur === 'string') cur = { hifz: cur }; // migrate legacy shape on write
-          cur = { ...(cur || {}) };
-          if (status) cur[stream] = status;
-          else delete cur[stream];
-          if (Object.keys(cur).length === 0) delete statuses[date];
-          else statuses[date] = cur;
-          return { ...st, statuses };
-        }),
-      })),
-    []
-  );
-  const clearStatuses = useCallback(
-    (sid) => setDb((s) => ({ ...s, students: s.students.map((st) => (st.id === sid ? { ...st, statuses: {}, overrides: {} } : st)) })),
-    []
-  );
-  const setAmountOverride = useCallback(
-    (sid, date, stream, span) => setDb((s) => ({
-      ...s,
-      students: s.students.map((st) => {
-        if (st.id !== sid) return st;
-        const overrides = { ...(st.overrides || {}) };
-        const statuses = { ...(st.statuses || {}) };
-        overrides[date] = { ...(overrides[date] || {}), [stream]: span };
-        // Editing a day invalidates every later generated day. Clear marks and
-        // manual edits after it; the planner then regenerates them from the
-        // original dailyHifz setting.
-        Object.keys(statuses).forEach((d) => { if (d > date) delete statuses[d]; });
-        Object.keys(overrides).forEach((d) => { if (d > date) delete overrides[d]; });
-        return { ...st, statuses, overrides };
-      }),
-    })),
-    []
-  );
+  const setSettings = useCallback((patch) => setDb((s) => R.setSettings(s, patch)), []);
+  const addStudent = useCallback((st) => setDb((s) => R.addStudent(s, st)), []);
+  const removeStudent = useCallback((id) => setDb((s) => R.removeStudent(s, id)), []);
+  const editStudent = useCallback((id, patch) => setDb((s) => R.editStudent(s, id, patch)), []);
+  const setStatus = useCallback((sid, date, stream, status) => setDb((s) => R.setStatus(s, sid, date, stream, status)), []);
+  const clearStatuses = useCallback((sid) => setDb((s) => R.clearStatuses(s, sid)), []);
+  const setAmountOverride = useCallback((sid, date, stream, span) => setDb((s) => R.setAmountOverride(s, sid, date, stream, span)), []);
 
   if (!db) return <div className="p-10 text-center text-slate-400">جارٍ التحميل…</div>;
   const active = db.students.find((x) => x.id === db.activeId) || db.students[0] || null;
@@ -157,7 +95,7 @@ export default function Home() {
           <div className="card border-dashed p-10 text-center text-slate-400">لا يوجد طلاب بعد — أضف طالبًا من النموذج أعلاه</div>
         ) : (
           <>
-            <StudentTabs students={db.students} activeId={active?.id} onPick={(id) => setDb((s) => ({ ...s, activeId: id }))} onRemove={removeStudent} />
+            <StudentTabs students={db.students} activeId={active?.id} onPick={(id) => setDb((s) => R.setActive(s, id))} onRemove={removeStudent} />
             {active && <StudentPlan student={active} settings={db.settings} onStatus={(date, stream, st) => setStatus(active.id, date, stream, st)} onAmountOverride={(date, stream, span) => setAmountOverride(active.id, date, stream, span)} onClear={clearStatuses} />}
           </>
         )}

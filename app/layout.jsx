@@ -1,7 +1,26 @@
-import { Cairo } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 
-const cairo = Cairo({ subsets: ['arabic', 'latin'], variable: '--font-body', display: 'swap' });
+/* Cairo is self-hosted from @fontsource-variable/cairo (committed to npm,
+   not fetched from Google at build time) so the build works fully offline.
+   Same variable font + arabic/latin subsets as the previous next/font/google
+   setup — the design is unchanged. */
+const cairo = localFont({
+  src: [
+    {
+      path: '../node_modules/@fontsource-variable/cairo/files/cairo-arabic-wght-normal.woff2',
+      weight: '200 1000',
+      style: 'normal',
+    },
+    {
+      path: '../node_modules/@fontsource-variable/cairo/files/cairo-latin-wght-normal.woff2',
+      weight: '200 1000',
+      style: 'normal',
+    },
+  ],
+  variable: '--font-body',
+  display: 'swap',
+});
 
 export const metadata = {
   title: 'بطاقة متابعة الحفظ والمراجعة',
