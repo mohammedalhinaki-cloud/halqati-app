@@ -108,12 +108,20 @@ export default function AddStudentForm({ onAdd }) {
               تفعيل المراجعة الكبرى
             </span>
           </label>
-          <div className={f.majorEnabled ? '' : 'opacity-40'}>
-            <span className="field-label">نظام الكبرى</span>
-            <p className="mt-1 rounded-md bg-violet-50 px-2 py-1 text-[12px] font-bold text-violet-800">
-              ⟲ تلقائية تنازلية: تبدأ من سورة الناس وتراجع وجهًا (مثل ورد الحفظ) كل يوم حتى الفاتحة، ثم تعيد الدورة من الناس
+          <label className={f.majorEnabled ? '' : 'pointer-events-none opacity-40'}>
+            <span className="field-label">مقدار الكبرى اليومي (اختَره مثل ورد الحفظ)</span>
+            <select className="field" value={f.majorFaces} disabled={!f.majorEnabled} onChange={(e) => set('majorFaces')(e.target.value)}>
+              {AMOUNT_OPTS.map((o) => (
+                <option key={o.v} value={o.v}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 rounded-md bg-violet-50 px-2 py-1 text-[11px] font-bold leading-4 text-violet-800">
+              ⟲ نظامها: تلقائية تنازلية — تبدأ من سورة الناس وتراجع{' '}
+              {AMOUNT_OPTS.find((o) => o.v === Number(f.majorFaces))?.label || 'المقدار المحدد'} كل يوم حتى الفاتحة، ثم تعيد الدورة من الناس
             </p>
-          </div>
+          </label>
         </div>
         <div className="sm:col-span-2 lg:col-span-4 flex items-center justify-between">
           <span className="text-xs text-rose-600 font-bold">{err}</span>
