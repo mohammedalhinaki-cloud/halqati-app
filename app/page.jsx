@@ -6,6 +6,18 @@ import StudentTabs from '../components/StudentTabs';
 import StudentPlan from '../components/StudentPlan';
 import { STORAGE_KEY, seedState } from '../lib/store';
 
+// localStorage migration: legacy level values → current 8-level names
+const migrateLevel = (lv) => {
+  if (lv === 'ابتدائي' || lv === 'ibtida-i') return 'الأول';
+  if (lv === 'mutawassit') return 'متوسط';
+  if (lv === 'thanawi') return 'ثانوي';
+  return lv;
+};
+const migrateDb = (db) =>
+  db && Array.isArray(db.students)
+    ? { ...db, students: db.students.map((s) => ({ ...s, level: migrateLevel(s.level) })) }
+    : db;
+
 export default function Home() {
   const [db, setDb] = useState(null);
 
@@ -24,7 +36,7 @@ export default function Home() {
       setDb((s) => {
         if (!s) {
           try {
-            const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+            const raw = migrateDb(JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'));
             return raw && raw.settings ? raw : seedState();
           } catch {
             return seedState();

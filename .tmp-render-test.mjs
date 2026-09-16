@@ -26,6 +26,10 @@ function surahIndexOf(qPos) {
 function surahByNumber(n) {
   return SURAHS[n - 1];
 }
+function ayahStartQ(surahahIndex, ayahNo) {
+  const s = SURAHS[surahahIndex];
+  return s.qp[Math.max(1, Math.min(s.count, ayahNo)) - 1];
+}
 function ayahAt(surahahIndex, p) {
   const s = SURAHS[surahahIndex];
   let lo = 1, hi = s.count;
@@ -36,11 +40,21 @@ function ayahAt(surahahIndex, p) {
   }
   return lo;
 }
+function ayahAtStart(surahahIndex, p) {
+  const s = SURAHS[surahahIndex];
+  let lo = 1, hi = s.count;
+  while (lo < hi) {
+    const mid = lo + hi >> 1;
+    if (s.qp[mid - 1] < p) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
 function spanLabel(aQ, bQ) {
   if (bQ <= aQ) return { surah: "\u2014", range: "" };
   const i1 = surahIndexOf(aQ);
   const i2 = surahIndexOf(bQ - 1);
-  const a1 = ayahAt(i1, aQ);
+  const a1 = ayahAtStart(i1, aQ);
   const a2 = ayahAt(i2, bQ - 1);
   if (i1 === i2) {
     return {
@@ -58,6 +72,14 @@ function rangeStartQ(surahNo) {
 }
 function rangeEndQ(surahNo) {
   return surahByNumber(surahNo).endQ;
+}
+function ayahRangeQ(surahFrom, ayahFrom, surahTo = surahFrom, ayahTo = ayahFrom) {
+  const a = surahByNumber(Number(surahFrom));
+  const b = surahByNumber(Number(surahTo));
+  if (!a || !b) return null;
+  const lo = ayahStartQ(Number(surahFrom) - 1, Number(ayahFrom));
+  const endStart = ayahStartQ(Number(surahTo) - 1, Number(ayahTo));
+  return { lo: Math.min(lo, endStart), hi: Math.min(TOTAL_Q, Math.max(lo, endStart + 1)) };
 }
 var DIGITS = "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669";
 function arNum(x) {
@@ -85,7 +107,8 @@ var AMOUNT_OPTS = [
   { v: 0.5, label: "\u0646\u0635\u0641 \u0648\u062C\u0647" },
   { v: 0.75, label: "\u062B\u0644\u0627\u062B\u0629 \u0623\u0631\u0628\u0627\u0639 \u0648\u062C\u0647" },
   { v: 1, label: "\u0648\u062C\u0647" },
-  { v: 1.5, label: "\u0648\u062C\u0647 \u0648\u0646\u0635\u0641" }
+  { v: 1.5, label: "\u0648\u062C\u0647 \u0648\u0646\u0635\u0641" },
+  { v: 2, label: "\u0648\u062C\u0647\u0627\u0646" }
 ];
 var AMOUNT_OPTS_OPTIONAL = [{ v: 0, label: "\u0644\u0627 \u064A\u0648\u062C\u062F" }, ...AMOUNT_OPTS];
 var toQ = (faces) => Math.round(faces * QPP);
@@ -220,6 +243,7 @@ function buildPlan(student, settings) {
   const baseQ = Math.max(1, toQ(student.dailyHifz || 0.5));
   const majorOn = !!student.majorEnabled;
   const majorBaseQ = Number(student.majorBaseQ) > 0 ? Number(student.majorBaseQ) : toQ(0.5);
+  const overrides = student.overrides || {};
   const totalSlots = Math.ceil(totalQ / baseQ);
   const holidays = parseHolidays(settings.holidays);
   const days = calendarDays(settings.startDate, settings.endDate, holidays);
@@ -265,31 +289,44 @@ function buildPlan(student, settings) {
   let savedQ = 0;
   let mMisses = 0;
   const minorFed = [];
+  const fedAt = [];
   let nMinor = 0;
-  const stats = { saved: 0, missed: 0, absent: 0, pending: 0, minorDone: 0, minorMissed: 0, minorAbsent: 0, minorSavedQ: 0, major: { saved: 0, missed: 0, absent: 0, savedQ: 0, pendingDays: 0 } };
+  const stats = { saved: 0, missed: 0, absent: 0, pending: 0, minorDone: 0, minorPending: 0, minorMissed: 0, minorAbsent: 0, minorSavedQ: 0, major: { saved: 0, missed: 0, absent: 0, savedQ: 0, pendingDays: 0 } };
   let dayIdx = 0;
   let nextDue = 0;
+  let manualCursor = null;
+  const spanFromCursor = () => {
+    if (manualCursor == null) return null;
+    if (!descending) {
+      if (manualCursor >= endQ) return null;
+      return { lo: manualCursor, hi: Math.min(manualCursor + baseQ, endQ) };
+    }
+    if (manualCursor <= startQ) return null;
+    return { lo: Math.max(startQ, manualCursor - baseQ), hi: manualCursor };
+  };
   const step = (d, beyondPlan) => {
     const k = dayIdx - misses;
-    const scheduled = sliceQ(k);
+    const scheduled = spanFromCursor() || sliceQ(k);
+    const manual = overrides[d.iso] && overrides[d.iso].hifz;
+    const selected = manual && Number.isFinite(Number(manual.qLo)) && Number.isFinite(Number(manual.qHi)) ? { lo: Math.min(manual.qLo, manual.qHi), hi: Math.max(manual.qLo, manual.qHi) } : null;
     const preview = null;
     const hStatus = stOf(d.iso, "hifz");
     const row = { type: "day", date: d.iso, holiday: false, beyondPlan, direction: descending ? "desc" : "asc", shiftBefore: misses };
     let hSpan = null;
     if (hStatus === "saved") {
-      hSpan = scheduled;
+      hSpan = selected || scheduled;
       if (scheduled) savedQ += scheduled.hi - scheduled.lo;
       nextDue = Math.min(nextDue, k);
       stats.saved++;
     } else if (hStatus === "missed" || hStatus === "absent") {
-      hSpan = scheduled;
-      row.rolledToNext = scheduled ? scheduled.hi - scheduled.lo : 0;
+      hSpan = selected || scheduled;
+      row.rolledToNext = hSpan ? hSpan.hi - hSpan.lo : 0;
       misses++;
       stats[hStatus]++;
     } else {
       {
         const pk = Math.max(k, nextDue);
-        hSpan = sliceQ(pk);
+        hSpan = selected || (manualCursor != null ? scheduled : sliceQ(pk));
         nextDue = pk + 1;
       }
       stats.pending++;
@@ -299,8 +336,8 @@ function buildPlan(student, settings) {
       baseQ,
       slotIndex: k < 0 ? null : k,
       shiftedBy: misses,
-      amountQ: scheduled ? scheduled.hi - scheduled.lo : 0,
-      plannedQ: hStatus === "saved" && scheduled ? scheduled.hi - scheduled.lo : 0,
+      amountQ: hSpan ? hSpan.hi - hSpan.lo : 0,
+      plannedQ: hStatus === "saved" && hSpan ? hSpan.hi - hSpan.lo : 0,
       qLo: hSpan ? hSpan.lo : null,
       qHi: hSpan ? hSpan.hi : null,
       fromQ: hSpan ? hSpan.lo : null,
@@ -310,23 +347,29 @@ function buildPlan(student, settings) {
     });
     const normSt = (v) => v === "saved" ? "done" : v || null;
     const minorStatus = normSt(stOf(d.iso, "minor"));
-    let minorCell = { plannedQ: 0, qLo: null, qHi: null, status: minorStatus, pendingDays: nMinor };
-    if (minorStatus === "missed" || minorStatus === "absent") {
-      nMinor++;
-      stats[minorStatus === "missed" ? "minorMissed" : "minorAbsent"]++;
-    } else {
-      const mslot = Math.max(0, dayIdx - nMinor);
-      const it = minorFed[mslot] || null;
-      const src = it || sliceQ(mslot > 0 ? mslot - 1 : null);
-      if (src) {
-        const q = Math.min(src.hi - src.lo, baseQ);
-        minorCell = { plannedQ: q, qLo: src.lo, qHi: src.lo + q, status: minorStatus === "done" ? "done" : null, preview: !it, pendingDays: nMinor };
-        if (minorStatus === "done") {
-          stats.minorDone++;
-          stats.minorSavedQ += q;
-        }
+    const mDue = nMinor < minorFed.length && fedAt[nMinor] < dayIdx;
+    const mSrc = mDue ? minorFed[nMinor] : null;
+    let minorCell = { plannedQ: 0, qLo: null, qHi: null, status: minorStatus, preview: false, pendingDays: 0 };
+    if (mSrc) {
+      const q = Math.min(mSrc.hi - mSrc.lo, baseQ);
+      minorCell = { plannedQ: q, qLo: mSrc.lo, qHi: mSrc.lo + q, status: minorStatus, pendingDays: dayIdx - fedAt[nMinor] };
+      if (!minorStatus) stats.minorPending++;
+      if (minorStatus === "done") {
+        stats.minorDone++;
+        stats.minorSavedQ += q;
+        nMinor++;
+      } else if (minorStatus === "missed" || minorStatus === "absent") {
+        stats[minorStatus === "missed" ? "minorMissed" : "minorAbsent"]++;
+        nMinor++;
       }
+    } else if (minorStatus === "done") {
+      stats.minorDone++;
     }
+    const minorOverride = overrides[d.iso] && overrides[d.iso].minor;
+    if (minorOverride && Number.isFinite(Number(minorOverride.qLo)) && Number.isFinite(Number(minorOverride.qHi))) {
+      minorCell = { ...minorCell, qLo: Math.min(minorOverride.qLo, minorOverride.qHi), qHi: Math.max(minorOverride.qLo, minorOverride.qHi), plannedQ: Math.abs(minorOverride.qHi - minorOverride.qLo) };
+    }
+    if (selected) manualCursor = descending ? selected.lo : selected.hi;
     row.minor = minorCell;
     if (majorOn) {
       const majStatus = normSt(stOf(d.iso, "major"));
@@ -345,11 +388,18 @@ function buildPlan(student, settings) {
           }
         }
       }
+      const majorOverride = overrides[d.iso] && overrides[d.iso].major;
+      if (majorOverride && Number.isFinite(Number(majorOverride.qLo)) && Number.isFinite(Number(majorOverride.qHi))) {
+        majCell = { ...majCell, qLo: Math.min(majorOverride.qLo, majorOverride.qHi), qHi: Math.max(majorOverride.qLo, majorOverride.qHi), plannedQ: Math.abs(majorOverride.qHi - majorOverride.qLo) };
+      }
       stats.major.pendingDays = mMisses;
       row.major = majCell;
       row.major.pendingQ = Math.max(0, totalSlots - Math.max(0, dayIdx - mMisses)) * baseQ;
     }
-    if (hStatus === "saved" && scheduled) minorFed.push({ ...scheduled, real: true, day: dayIdx });
+    if (hStatus === "saved" && scheduled) {
+      minorFed.push({ ...scheduled, real: true, day: dayIdx });
+      fedAt.push(dayIdx);
+    }
     dayIdx++;
     rows.push(row);
   };
@@ -384,7 +434,7 @@ function buildPlan(student, settings) {
       }
     }
   }
-  stats.minorPendingQ = Math.max(0, minorFed.length - Math.max(0, dayIdx - nMinor)) * baseQ;
+  stats.minorPendingQ = Math.max(0, minorFed.length - nMinor) * baseQ;
   stats.majorPendingQ = majorOn ? Math.max(0, totalSlots - Math.max(0, dayIdx - mMisses)) * baseQ : 0;
   const sFrom = surahByNumber(fromN);
   const sTo = surahByNumber(toN);
@@ -411,9 +461,14 @@ function buildPlan(student, settings) {
 
 // lib/store.js
 var LEVELS = {
-  "ibtida-i": { label: "\u0627\u0628\u062A\u062F\u0627\u0626\u064A", hint: "\u0627\u0644\u062D\u062F \u0627\u0644\u0623\u062F\u0646\u0649: \u0667 \u0623\u0633\u0637\u0631 \u2248 \xBE \u0648\u062C\u0647", faces: 0.25 },
-  "mutawassit": { label: "\u0645\u062A\u0648\u0633\u0637", hint: "\u0627\u0644\u062D\u062F \u0627\u0644\u0623\u062F\u0646\u0649: \u0661\u0661 \u0633\u0637\u0631 \u2248 \u0648\u062C\u0647", faces: 0.5 },
-  "thanawi": { label: "\u062B\u0627\u0646\u0648\u064A", hint: "\u0627\u0644\u062D\u062F \u0627\u0644\u0623\u062F\u0646\u0649: \u0648\u062C\u0647 \u0643\u0627\u0645\u0644", faces: 1 }
+  "\u0627\u0644\u0623\u0648\u0644": { label: "\u0627\u0644\u0623\u0648\u0644", hint: "\u0627\u0644\u062D\u062F \u0627\u0644\u0623\u062F\u0646\u0649: \xBC \u0648\u062C\u0647", faces: 0.25 },
+  "\u0627\u0644\u062B\u0627\u0646\u064A": { label: "\u0627\u0644\u062B\u0627\u0646\u064A", hint: "\u0627\u0644\u062D\u062F \u0627\u0644\u0623\u062F\u0646\u0649: \xBC \u0648\u062C\u0647", faces: 0.25 },
+  "\u0627\u0644\u062B\u0627\u0644\u062B": { label: "\u0627\u0644\u062B\u0627\u0644\u062B", hint: "\u0627\u0644\u062D\u062F \u0627\u0644\u0623\u062F\u0646\u0649: \xBC \u0648\u062C\u0647", faces: 0.25 },
+  "\u0627\u0644\u0631\u0627\u0628\u0639": { label: "\u0627\u0644\u0631\u0627\u0628\u0639", hint: "\u0627\u0644\u062D\u062F \u0627\u0644\u0623\u062F\u0646\u0649: \xBC \u0648\u062C\u0647", faces: 0.25 },
+  "\u0627\u0644\u062E\u0627\u0645\u0633": { label: "\u0627\u0644\u062E\u0627\u0645\u0633", hint: "\u0627\u0644\u062D\u062F \u0627\u0644\u0623\u062F\u0646\u0649: \xBC \u0648\u062C\u0647", faces: 0.25 },
+  "\u0627\u0644\u0633\u0627\u062F\u0633": { label: "\u0627\u0644\u0633\u0627\u062F\u0633", hint: "\u0627\u0644\u062D\u062F \u0627\u0644\u0623\u062F\u0646\u0649: \xBC \u0648\u062C\u0647", faces: 0.25 },
+  "\u0645\u062A\u0648\u0633\u0637": { label: "\u0645\u062A\u0648\u0633\u0637", hint: "\u0627\u0644\u062D\u062F \u0627\u0644\u0623\u062F\u0646\u0649: \xBD \u0648\u062C\u0647", faces: 0.5 },
+  "\u062B\u0627\u0646\u0648\u064A": { label: "\u062B\u0627\u0646\u0648\u064A", hint: "\u0627\u0644\u062D\u062F \u0627\u0644\u0623\u062F\u0646\u0649: \u0648\u062C\u0647 \u0643\u0627\u0645\u0644", faces: 1 }
 };
 function seedState() {
   const mk = (id, name, phone, level, halaqa, dailyHifz, statuses, major) => ({
@@ -442,7 +497,7 @@ function seedState() {
     },
     activeId: "s1",
     students: [
-      mk("s1", "\u0623\u062D\u0645\u062F \u0628\u0646 \u0645\u062D\u0645\u062F \u0627\u0644\u0639\u062A\u064A\u0628\u064A", "0555123456", "mutawassit", "\u062D\u0644\u0642\u0629 \u0627\u0644\u0641\u0631\u0642\u0627\u0646 \u2014 \u0627\u0644\u0635\u0628\u0627\u062D", 0.5, {
+      mk("s1", "\u0623\u062D\u0645\u062F \u0628\u0646 \u0645\u062D\u0645\u062F \u0627\u0644\u0639\u062A\u064A\u0628\u064A", "0555123456", "\u0645\u062A\u0648\u0633\u0637", "\u062D\u0644\u0642\u0629 \u0627\u0644\u0641\u0631\u0642\u0627\u0646 \u2014 \u0627\u0644\u0635\u0628\u0627\u062D", 0.5, {
         "2026-09-20": { hifz: "saved" },
         "2026-09-21": { hifz: "missed" },
         // slides everything one day — no merge
@@ -456,7 +511,7 @@ function seedState() {
         "s2",
         "\u062E\u0627\u0644\u062F \u0628\u0646 \u0633\u0639\u062F \u0627\u0644\u0642\u062D\u0637\u0627\u0646\u064A",
         "0544987654",
-        "ibtida-i",
+        "\u0627\u0644\u0623\u0648\u0644",
         "\u062D\u0644\u0642\u0629 \u0627\u0644\u0645\u0635\u062D\u0641 \u2014 \u0627\u0644\u0645\u0633\u0627\u0621",
         0.25,
         {
@@ -504,11 +559,14 @@ function Stat({ label, value, cls }) {
     /* @__PURE__ */ jsx("div", { className: "text-[11px] font-bold opacity-80", children: label })
   ] });
 }
-function MarkCell({ label, span, status, amount, style, preview, deferred, dueTxt, onPick, opts, badge }) {
+function MarkCell({ label, span, status, amount, style, preview, deferred, dueTxt, onPick, opts, badge, onEditAmount }) {
   const lbl = span && span.qLo != null && span.qHi > span.qLo ? spanLabel(span.qLo, span.qHi) : null;
   const st = status ? style[status] : null;
   return /* @__PURE__ */ jsxs("td", { className: "align-top border-r border-slate-100 " + (status === "missed" || status === "absent" ? "bg-rose-50/60" : status === "done" || status === "saved" ? "bg-emerald-50/50" : ""), children: [
-    /* @__PURE__ */ jsx("div", { className: "mb-0.5 text-[10px] font-extrabold tracking-wide text-slate-400", children: label }),
+    /* @__PURE__ */ jsxs("div", { className: "mb-0.5 flex items-center justify-between text-[10px] font-extrabold tracking-wide text-slate-400", children: [
+      /* @__PURE__ */ jsx("span", { children: label }),
+      onEditAmount && /* @__PURE__ */ jsx("button", { type: "button", onClick: onEditAmount, className: "rounded px-1 text-base leading-3 text-slate-500 hover:bg-slate-200", "aria-label": "\u062A\u0639\u062F\u064A\u0644 \u0645\u0642\u062F\u0627\u0631 \u0627\u0644\u062E\u0644\u064A\u0629", children: "\u22EE" })
+    ] }),
     /* @__PURE__ */ jsx("div", { className: "text-[12px] leading-5", children: lbl ? /* @__PURE__ */ jsxs("span", { className: preview ? "italic text-slate-400" : "font-bold text-slate-800", children: [
       span.amountTxt ? span.amountTxt + " \u2014 " : "",
       "\u0633\u0648\u0631\u0629 ",
@@ -536,12 +594,13 @@ function MarkCell({ label, span, status, amount, style, preview, deferred, dueTx
     )) })
   ] });
 }
-function DayRow({ row, student, onStatus }) {
+function DayRow({ row, student, onStatus, onEditAmount }) {
   const hj = hijriInfo(row.date);
   const pick = (stream, v) => {
     const cur = stream === "hifz" ? row.status : row[stream] && row[stream].status;
     onStatus(row.date, stream, cur === v ? null : v);
   };
+  const editAmount = (stream) => onEditAmount && onEditAmount(row, stream);
   const H = [
     ["saved", "\u062D\u0641\u0638", "bg-emerald-600"],
     ["missed", "\u0644\u0645 \u064A\u062D\u0641\u0638", "bg-rose-600"],
@@ -576,6 +635,7 @@ function DayRow({ row, student, onStatus }) {
         dueTxt: row.empty ? "\u0627\u0643\u062A\u0645\u0644 \u0627\u0644\u0645\u062F\u0649 \u2014 \u0644\u0627 \u062C\u062F\u064A\u062F" : "\u2014",
         onPick: (v) => pick("hifz", v),
         opts: H,
+        onEditAmount: () => editAmount("hifz"),
         badge: row.rolledToNext > 0 ? /* @__PURE__ */ jsxs("span", { className: "rounded bg-rose-100 px-1.5 text-[10px] font-bold text-rose-700", children: [
           "\u21A9 ",
           amountLabel(row.rolledToNext),
@@ -590,12 +650,20 @@ function DayRow({ row, student, onStatus }) {
         span: row.minor ? { qLo: row.minor.qLo, qHi: row.minor.qHi } : null,
         status: row.minor && row.minor.status,
         amount: row.minor && row.minor.plannedQ,
-        preview: row.minor && row.minor.preview,
         style: REV_STYLE,
         deferred: "\u0627\u0646\u0632\u0627\u062D\u062A \u0644\u0644\u0635\u0628\u0627\u062D \u0627\u0644\u0642\u0627\u062F\u0645",
         dueTxt: "\u0644\u0627 \u0634\u064A\u0621 \u0645\u0633\u062A\u062D\u0642",
         onPick: (v) => pick("minor", v),
-        opts: R
+        opts: R,
+        onEditAmount: () => editAmount("minor"),
+        badge: row.minor && row.minor.plannedQ > 0 && !row.minor.status ? /* @__PURE__ */ jsxs("span", { className: "rounded bg-sky-100 px-1.5 text-[10px] font-bold text-sky-700", children: [
+          "\u0645\u0646 \u062D\u0641\u0638 \u0627\u0644\u0623\u0645\u0633 \u2014 \u062A\u062D\u062A\u0627\u062C \u062A\u0639\u0644\u064A\u0645 \xAB\u062A\u0645\xBB",
+          row.minor.pendingDays > 1 ? ` \xB7 \u0645\u062A\u0623\u062E\u0631\u0629 ${arNum(row.minor.pendingDays)} \u064A\u0648\u0645` : ""
+        ] }) : row.minor && row.minor.pendingDays > 1 && row.minor.status !== "done" ? /* @__PURE__ */ jsxs("span", { className: "rounded bg-amber-100 px-1.5 text-[10px] font-bold text-amber-800", children: [
+          "\u0645\u062A\u0623\u062E\u0631\u0629 ",
+          arNum(row.minor.pendingDays),
+          " \u064A\u0648\u0645"
+        ] }) : null
       }
     ),
     student.majorEnabled ? /* @__PURE__ */ jsx(
@@ -611,6 +679,7 @@ function DayRow({ row, student, onStatus }) {
         dueTxt: "\u2014",
         onPick: (v) => pick("major", v),
         opts: R,
+        onEditAmount: () => editAmount("major"),
         badge: row.major && row.major.cycle > 1 ? /* @__PURE__ */ jsxs("span", { className: "rounded bg-violet-100 px-1.5 text-[10px] font-bold text-violet-800", children: [
           "\u0627\u0644\u062F\u0648\u0631\u0629 ",
           arNum(row.major.cycle)
@@ -619,10 +688,12 @@ function DayRow({ row, student, onStatus }) {
     ) : null
   ] });
 }
-function StudentPlan({ student, settings, onStatus, onClear, onEdit }) {
+function StudentPlan({ student, settings, onStatus, onClear, onEdit, onAmountOverride }) {
   const plan = useMemo(() => buildPlan(student, settings), [student, settings]);
   const { rows, stats, totalQ, savedQ, range } = plan;
   const [edit, setEdit] = useState(null);
+  const [amountEdit, setAmountEdit] = useState(null);
+  const [custom, setCustom] = useState({ surah: "114", from: "1", toSurah: "114", to: "6" });
   const weeks = useMemo(() => {
     const m = [];
     for (const r of rows) {
@@ -649,7 +720,7 @@ function StudentPlan({ student, settings, onStatus, onClear, onEdit }) {
             student.phone
           ] }),
           /* @__PURE__ */ jsx("span", { className: "rounded-full px-2 py-0.5 " + dirChip.cls, children: dirChip.txt }),
-          /* @__PURE__ */ jsx("span", { className: "rounded-full bg-sky-50 px-2 py-0.5 text-sky-700", children: "\u0635\u063A\u0631\u0649: \u0645\u0646 \u062D\u0641\u0638 \u0627\u0644\u0623\u0645\u0633 \u2014 \u062A\u062D\u062A\u0627\u062C \u062A\u0639\u0644\u064A\u0645 \xAB\u062A\u0645\xBB" }),
+          /* @__PURE__ */ jsx("span", { className: "rounded-full bg-sky-50 px-2 py-0.5 text-sky-700", children: "\u0635\u063A\u0631\u0649: \u0645\u0646 \u0637\u0627\u0628\u0648\u0631 \u062D\u0641\u0638 \u0627\u0644\u0623\u0645\u0633 \u0641\u0642\u0637 \u2014 \u0623\u0648\u0644 \u064A\u0648\u0645 \u0641\u0627\u0631\u063A\u060C \u0648\u0644\u0627 \u062A\u064F\u0639\u0644\u064E\u0651\u0645 \u062A\u0644\u0642\u0627\u0626\u064A\u064B\u0627" }),
           student.majorEnabled ? /* @__PURE__ */ jsx("span", { className: "rounded-full bg-violet-50 px-2 py-0.5 text-violet-700", children: "\u0643\u0628\u0631\u0649: \u062A\u0644\u0642\u0627\u0626\u064A\u0629 \u0645\u0646 \u0627\u0644\u0646\u0627\u0633 \u2190 \u0627\u0644\u0641\u0627\u062A\u062D\u0629" }) : /* @__PURE__ */ jsx("span", { className: "rounded-full bg-slate-100 px-2 py-0.5 text-slate-400", children: "\u0643\u0628\u0631\u0649: \u063A\u064A\u0631 \u0645\u0641\u0639\u0651\u0644\u0629" })
         ] })
       ] }),
@@ -736,7 +807,7 @@ function StudentPlan({ student, settings, onStatus, onClear, onEdit }) {
           const dayRows = w.rows.filter((r) => r.type === "day");
           const s = { saved: 0, missed: 0, absent: 0 };
           dayRows.forEach((r) => r.status && s[r.status]++);
-          return /* @__PURE__ */ jsx(FragmentWeek, { n: wi + 1, w, s, dayRows, onStatus, student, cols }, w.key);
+          return /* @__PURE__ */ jsx(FragmentWeek, { n: wi + 1, w, s, dayRows, onStatus, onEditAmount: (row, stream) => setAmountEdit({ row, stream }), student, cols }, w.key);
         })
       ] }),
       /* @__PURE__ */ jsx("tfoot", { children: /* @__PURE__ */ jsx("tr", { className: "bg-slate-50 text-[11px] text-slate-500", children: /* @__PURE__ */ jsxs("td", { colSpan: cols, children: [
@@ -745,7 +816,7 @@ function StudentPlan({ student, settings, onStatus, onClear, onEdit }) {
       ] }) }) })
     ] }) }),
     /* @__PURE__ */ jsxs("div", { className: "mt-3 flex items-center justify-between text-xs text-slate-500", children: [
-      /* @__PURE__ */ jsx("span", { children: "\u0643\u0644 \u0633\u062C\u0644 \u0645\u0633\u062A\u0642\u0644: \xAB\u0644\u0645 \u064A\u062D\u0641\u0638/\u0644\u0645 \u062A\u062A\u0645/\u063A\u0627\u0626\u0628\xBB \u064A\u0628\u0642\u064A \u064A\u0648\u0645\u0647 \u0623\u062D\u0645\u0631 \u0648\u064A\u0624\u062C\u0651\u0644\u0647 \u064A\u0648\u0645\u064B\u0627 \u0643\u0627\u0645\u0644\u064B\u0627 \u2014 \u0627\u0644\u062E\u0637\u0629 \u062A\u0646\u0632\u0627\u062D \u0648\u0644\u0627 \u062A\u064F\u062F\u0645\u062C. \u0627\u0644\u0635\u063A\u0631\u0649 \u062A\u064F\u062D\u0633\u0628 \u062A\u0644\u0642\u0627\u0626\u064A\u064B\u0627 \u0645\u0646 \u062D\u0641\u0638 \u0627\u0644\u0623\u0645\u0633." }),
+      /* @__PURE__ */ jsx("span", { children: "\u0643\u0644 \u0633\u062C\u0644 \u0645\u0633\u062A\u0642\u0644: \xAB\u0644\u0645 \u064A\u062D\u0641\u0638/\u0644\u0645 \u062A\u062A\u0645/\u063A\u0627\u0626\u0628\xBB \u064A\u0628\u0642\u064A \u064A\u0648\u0645\u0647 \u0623\u062D\u0645\u0631 \u0648\u064A\u0624\u062C\u0651\u0644\u0647 \u064A\u0648\u0645\u064B\u0627 \u0643\u0627\u0645\u0644\u064B\u0627 \u2014 \u0627\u0644\u062E\u0637\u0629 \u062A\u0646\u0632\u0627\u062D \u0648\u0644\u0627 \u062A\u064F\u062F\u0645\u062C. \u0627\u0644\u0635\u063A\u0631\u0649 \u062A\u064F\u063A\u0630\u064E\u0651\u0649 \u0645\u0646 \u062D\u0641\u0638 \u0627\u0644\u0623\u0645\u0633 \u0641\u0642\u0637: \u0644\u0627 \u0634\u064A\u0621 \u0641\u064A \u0623\u0648\u0644 \u064A\u0648\u0645\u060C \u0648\u062A\u0628\u0642\u0649 \u0645\u0639\u0644\u0651\u0642\u0629 \u062D\u062A\u0649 \u062A\u0639\u0644\u0651\u0645\u0647\u0627 \xAB\u062A\u0645\xBB." }),
       /* @__PURE__ */ jsx(
         "button",
         {
@@ -754,10 +825,47 @@ function StudentPlan({ student, settings, onStatus, onClear, onEdit }) {
           children: "\u0625\u0639\u0627\u062F\u0629 \u062A\u0639\u064A\u064A\u0646 \u0627\u0644\u062D\u0627\u0644\u0627\u062A"
         }
       )
-    ] })
+    ] }),
+    amountEdit && /* @__PURE__ */ jsx("div", { className: "fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4", role: "dialog", "aria-modal": "true", children: /* @__PURE__ */ jsxs("div", { className: "w-full max-w-sm rounded-xl bg-white p-4 shadow-2xl", dir: "rtl", children: [
+      /* @__PURE__ */ jsxs("div", { className: "mb-3 flex items-center justify-between", children: [
+        /* @__PURE__ */ jsxs("h4", { className: "font-extrabold", children: [
+          "\u062A\u0639\u062F\u064A\u0644 \u0645\u0642\u062F\u0627\u0631 ",
+          amountEdit.stream === "hifz" ? "\u0627\u0644\u062D\u0641\u0638" : amountEdit.stream === "minor" ? "\u0627\u0644\u0645\u0631\u0627\u062C\u0639\u0629 \u0627\u0644\u0635\u063A\u0631\u0649" : "\u0627\u0644\u0645\u0631\u0627\u062C\u0639\u0629 \u0627\u0644\u0643\u0628\u0631\u0649"
+        ] }),
+        /* @__PURE__ */ jsx("button", { onClick: () => setAmountEdit(null), className: "text-xl text-slate-400", children: "\xD7" })
+      ] }),
+      /* @__PURE__ */ jsxs("p", { className: "mb-2 text-xs text-slate-500", children: [
+        "\u0633\u064A\u064F\u0639\u0627\u062F \u062A\u0648\u0644\u064A\u062F \u0627\u0644\u0623\u064A\u0627\u0645 \u0627\u0644\u062A\u0627\u0644\u064A\u0629 \u0628\u0642\u062F\u0631 \u0627\u0644\u0637\u0627\u0644\u0628 \u0627\u0644\u0623\u0635\u0644\u064A: ",
+        amountLabel(Math.round((student.dailyHifz || 0.25) * QPP))
+      ] }),
+      /* @__PURE__ */ jsx("div", { className: "grid grid-cols-2 gap-2", children: AMOUNT_OPTS.filter((o) => o.v !== 0.75 || true).map((o) => /* @__PURE__ */ jsx("button", { onClick: () => {
+        const r = amountEdit.row;
+        const end = r.qHi;
+        const start = r.direction === "desc" ? Math.max(0, end - Math.round(o.v * QPP)) : r.qLo;
+        const span = r.direction === "desc" ? { qLo: start, qHi: end } : { qLo: start, qHi: Math.min(2416, start + Math.round(o.v * QPP)) };
+        onAmountOverride(amountEdit.row.date, amountEdit.stream, span);
+        setAmountEdit(null);
+      }, className: "rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold hover:bg-emerald-50", children: o.label }, o.v)) }),
+      /* @__PURE__ */ jsxs("div", { className: "mt-4 border-t pt-3", children: [
+        /* @__PURE__ */ jsx("div", { className: "mb-2 text-xs font-bold text-slate-500", children: "\u0645\u062E\u0635\u0635 \u0645\u0646 \u0622\u064A\u0629 \u0625\u0644\u0649 \u0622\u064A\u0629" }),
+        /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 gap-2", children: [
+          /* @__PURE__ */ jsx("input", { value: custom.surah, onChange: (e) => setCustom({ ...custom, surah: e.target.value }), placeholder: "\u0627\u0644\u0633\u0648\u0631\u0629 (\u0631\u0642\u0645)", className: "rounded border p-2 text-sm" }),
+          /* @__PURE__ */ jsx("input", { value: custom.from, onChange: (e) => setCustom({ ...custom, from: e.target.value }), placeholder: "\u0645\u0646 \u0622\u064A\u0629", className: "rounded border p-2 text-sm" }),
+          /* @__PURE__ */ jsx("input", { value: custom.toSurah, onChange: (e) => setCustom({ ...custom, toSurah: e.target.value }), placeholder: "\u0625\u0644\u0649 \u0633\u0648\u0631\u0629", className: "rounded border p-2 text-sm" }),
+          /* @__PURE__ */ jsx("input", { value: custom.to, onChange: (e) => setCustom({ ...custom, to: e.target.value }), placeholder: "\u0625\u0644\u0649 \u0622\u064A\u0629", className: "rounded border p-2 text-sm" })
+        ] }),
+        /* @__PURE__ */ jsx("button", { onClick: () => {
+          const s = ayahRangeQ(custom.surah, custom.from, custom.toSurah, custom.to);
+          if (s) {
+            onAmountOverride(amountEdit.row.date, amountEdit.stream, s);
+            setAmountEdit(null);
+          }
+        }, className: "mt-2 w-full rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white", children: "\u062D\u0641\u0638 \u0627\u0644\u0645\u0642\u062F\u0627\u0631 \u0627\u0644\u0645\u062E\u0635\u0635" })
+      ] })
+    ] }) })
   ] });
 }
-function FragmentWeek({ n, w, s, dayRows, student, cols, onStatus }) {
+function FragmentWeek({ n, w, s, dayRows, student, cols, onStatus, onEditAmount }) {
   const fr = w.rows[0], lr = w.rows[w.rows.length - 1];
   const range = !fr ? "" : fr.date === lr.date ? hijriInfo(fr.date).dm : `${hijriInfo(fr.date).dm} \u2190 ${hijriInfo(lr.date).dm}`;
   return /* @__PURE__ */ jsxs(Fragment, { children: [
@@ -777,7 +885,7 @@ function FragmentWeek({ n, w, s, dayRows, student, cols, onStatus }) {
         " ",
         hijriInfo(r.date).full,
         " \u2014 \u0644\u0627 \u064A\u0648\u062C\u062F \u062D\u0641\u0638 \u0623\u0648 \u0645\u0631\u0627\u062C\u0639\u0629"
-      ] }) }, r.date) : /* @__PURE__ */ jsx(DayRow, { row: r, student, onStatus }, r.date)
+      ] }) }, r.date) : /* @__PURE__ */ jsx(DayRow, { row: r, student, onStatus, onEditAmount }, r.date)
     ),
     /* @__PURE__ */ jsx("tr", { className: "bg-slate-100 text-[12px] font-extrabold", children: /* @__PURE__ */ jsxs("td", { colSpan: cols, className: "text-right", children: [
       "\u0646\u062A\u064A\u062C\u0629 \u0627\u0644\u0641\u062A\u0631\u0629: \u062D\u0641\u0638 ",
@@ -1045,8 +1153,7 @@ function SettingsCard({ settings, onChange }) {
       ] }),
       /* @__PURE__ */ jsxs3("span", { className: "ms-1 text-slate-500", children: [
         "\u0623\u064A\u0627\u0645 \u0627\u0644\u062F\u0631\u0627\u0633\u0629: ",
-        /* @__PURE__ */ jsx3("b", { className: "text-slate-800", children: arNum(days) }),
-        " \u2014 \u0627\u0644\u062A\u062E\u0632\u064A\u0646 \u062E\u0644\u0641\u064A\u064B\u0627 \u0645\u064A\u0644\u0627\u062F\u064A (YYYY-MM-DD) \u0648\u0627\u0644\u0639\u0631\u0636 \u0647\u062C\u0631\u064A \u0623\u0645 \u0627\u0644\u0642\u0631\u0649 \u062F\u0627\u0626\u0645\u064B\u0627."
+        /* @__PURE__ */ jsx3("b", { className: "text-slate-800", children: arNum(days) })
       ] })
     ] })
   ] });
@@ -1070,7 +1177,7 @@ function AddStudentForm({ onAdd }) {
   const [f, setF] = useState4({
     name: "",
     phone: "",
-    level: "ibtida-i",
+    level: "\u0627\u0644\u0623\u0648\u0644",
     halaqa: "",
     dailyHifz: 0.25,
     from: 1,
@@ -1103,11 +1210,7 @@ function AddStudentForm({ onAdd }) {
       ] }),
       /* @__PURE__ */ jsxs4("label", { children: [
         /* @__PURE__ */ jsx4("span", { className: "field-label", children: "\u0627\u0644\u0645\u0633\u062A\u0648\u0649" }),
-        /* @__PURE__ */ jsx4("select", { className: "field", value: f.level, onChange: (e) => setLevel(e.target.value), children: Object.entries(LEVELS).map(([k, v]) => /* @__PURE__ */ jsxs4("option", { value: k, children: [
-          v.label,
-          " \u2014 ",
-          v.hint
-        ] }, k)) })
+        /* @__PURE__ */ jsx4("select", { className: "field", value: f.level, onChange: (e) => setLevel(e.target.value), children: Object.entries(LEVELS).map(([k, v]) => /* @__PURE__ */ jsx4("option", { value: k, children: v.label }, k)) })
       ] }),
       /* @__PURE__ */ jsxs4("label", { children: [
         /* @__PURE__ */ jsx4("span", { className: "field-label", children: "\u0627\u0633\u0645 \u0627\u0644\u062D\u0644\u0642\u0629" }),
