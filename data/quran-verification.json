@@ -1,0 +1,152 @@
+{
+  "generatedBy": "scripts/build-quran-data.mjs",
+  "dataSha256": "ba9689b751ebf4d3b581dd5a9697906404affffeb6cb3e647d7c59cf48a0fe72",
+  "totals": {
+    "surahs": 114,
+    "ayahs": 6236,
+    "pages": 604,
+    "quarters": 2416,
+    "quarterSumOfAyahSpans": 2416
+  },
+  "sources": {
+    "tanzil": {
+      "file": "data/sources/tanzil-quran-data.xml",
+      "sha256": "423afa57b81ccee79a4f15a2df1b8aa6a6c06498cfe8ce12e627adc41512c4a9"
+    },
+    "qcf4Index": {
+      "file": "data/sources/qcf4-index.json",
+      "sha256": "c98bdb05fbf0fc3ac56a97547fe2d9df63f7aeb643fb907a58af664cd2ed4be5"
+    },
+    "qcf4Verses": {
+      "file": "data/sources/qcf4-verses.json",
+      "sha256": "c69036a817e861492a4a585595521dc5c01dcc1eacefdff5f54fbfd642567218"
+    },
+    "apiAnchors": {
+      "file": "data/sources/quran-com-api-anchors.json",
+      "sha256": "38d21238eed85b156875e2dc4643012dadfe57a545c864628c2cbb01b2974b3e"
+    },
+    "pageModelNotes": {
+      "file": "data/sources/page-model-notes.json",
+      "sha256": "ae778d03b8def2f419f2bd4640466143c2811900a03beed43fe18c4feb9e1acb"
+    },
+    "page001": {
+      "file": "data/sources/qcf4-pages-sample/001.json",
+      "sha256": "354ca00d091de4d6005d5c9c0512e7c942c4ef08ed36a0312213ef4107efdfa8"
+    },
+    "page002": {
+      "file": "data/sources/qcf4-pages-sample/002.json",
+      "sha256": "88270e9f94d999fa3d147ade6cc82b29128b839a73be43bebbe7dde49538842f"
+    },
+    "page049": {
+      "file": "data/sources/qcf4-pages-sample/049.json",
+      "sha256": "db8649d70358dfb1e24bac68f19edac8ff25e4ebc701f86faa53e3d1cd291ac8"
+    },
+    "page050": {
+      "file": "data/sources/qcf4-pages-sample/050.json",
+      "sha256": "3e646cebce83eedc07c15ac79aa1a76b392d96adeb6073ed72aaab3c000afafa"
+    },
+    "page582": {
+      "file": "data/sources/qcf4-pages-sample/582.json",
+      "sha256": "ba6ac22d69d8caa4fb3a8674e9d63c8547c2d2c450f908d14031cdd02192292a"
+    },
+    "page604": {
+      "file": "data/sources/qcf4-pages-sample/604.json",
+      "sha256": "5a4f38a63387305d91f168692a8819ae5e46400c4a9cf3c0292984b1559d8e68"
+    }
+  },
+  "checks": [
+    {
+      "name": "Tanzil: 114 suras",
+      "ok": true,
+      "detail": "got 114"
+    },
+    {
+      "name": "QCF4: 114 chapters",
+      "ok": true,
+      "detail": "got 114"
+    },
+    {
+      "name": "Tanzil: exactly 6236 ayahs",
+      "ok": true,
+      "detail": "got 6236"
+    },
+    {
+      "name": "QCF4: exactly 6236 ayahs",
+      "ok": true,
+      "detail": "got 6236"
+    },
+    {
+      "name": "every surah has the same ayah count in both sources",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "every surah name agrees in both sources (after normalisation)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "QCF4: a record for every one of the 6236 ayahs",
+      "ok": true,
+      "detail": "got 6236"
+    },
+    {
+      "name": "every one of the 604 pages carries at least one ayah",
+      "ok": true,
+      "detail": "got 604"
+    },
+    {
+      "name": "ayah layout is monotonic in mushaf order (page, then line)",
+      "ok": true
+    },
+    {
+      "name": "every surah begins on the page the QCF4 index declares",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "the 6 known index last-page deviations are exactly the pinned ones (عبس, الإنشقاق, الغاشية, البلد, الشرح, العلق)",
+      "ok": true,
+      "detail": "actual: عبس 585→586, الإنشقاق 589→590, الغاشية 592→593, البلد 594→595, الشرح 596→597, العلق 597→598"
+    },
+    {
+      "name": "Tanzil page table agrees with the layout on 6180/6236 ayahs; the rest are the pinned older-print deviations",
+      "ok": true,
+      "detail": "[{\"key\":\"5:77\",\"tanzilPage\":121,\"qcf4Page\":120},{\"key\":\"5:83\",\"tanzilPage\":122,\"qcf4Page\":121},{\"key\":\"5:90\",\"tanzilPage\":123,\"qcf4Page\":122},{\"key\":\"6:131\",\"tanzilPage\":144,\"qcf4Page\":145}]"
+    },
+    {
+      "name": "every pagination difference between the two prints is exactly one page",
+      "ok": true,
+      "detail": "worst delta=1"
+    },
+    {
+      "name": "Quran.com API anchors (7 pages, incl. 604 = الفلق/الناس) match the data",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "QCF4 page-glyph sample (6 pages, 70 ayahs) matches the per-ayah layout",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "quarter-face positions never go backwards",
+      "ok": true
+    },
+    {
+      "name": "the mushaf starts at quarter-face 0",
+      "ok": true,
+      "detail": "got 0"
+    },
+    {
+      "name": "every quarter position is inside the mushaf",
+      "ok": true,
+      "detail": "last=2415"
+    },
+    {
+      "name": "exactly 6236 ayah records built",
+      "ok": true,
+      "detail": "got 6236"
+    }
+  ]
+}

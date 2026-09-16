@@ -90,8 +90,8 @@ console.log('— 3) real user flow: add student + hifz/minor/major marks + manua
   s1 = R.setStatus(s1, sid, '2026-09-20', 'major', 'done');
   s1 = R.setStatus(s1, sid, '2026-09-21', 'hifz', 'missed');
   s1 = R.setStatus(s1, sid, '2026-09-22', 'major', 'absent');
-  // manual amount pin (custom ayah range -> quarters)
-  s1 = R.setAmountOverride(s1, sid, '2026-09-24', 'hifz', { qLo: 41, qHi: 43 });
+  // manual amount pin (exact ayah range: الفلق ١ → الناس ٣)
+  s1 = R.setAmountOverride(s1, sid, '2026-09-24', 'hifz', { s1: 113, a1: 1, s2: 114, a2: 3 });
   // change a global setting too
   s1 = R.setSettings(s1, { endDate: '2026-12-16' });
   // switch active student
@@ -109,8 +109,8 @@ console.log('— 3) real user flow: add student + hifz/minor/major marks + manua
     ? ok('day-1 triple mark intact (hifz+minor+major)')
     : bad(`day-1 marks wrong: ${JSON.stringify(me && me.statuses['2026-09-20'])}`);
   me && me.statuses['2026-09-21']?.hifz === 'missed' ? ok('day-2 «لم يحفظ» intact') : bad('day-2 hifz mark lost');
-  me && me.overrides?.['2026-09-24']?.hifz?.qLo === 41 && me.overrides['2026-09-24'].hifz.qHi === 43
-    ? ok('manual amount pin intact {qLo:41,qHi:43}')
+  me && me.overrides?.['2026-09-24']?.hifz?.s1 === 113 && me.overrides['2026-09-24'].hifz.a1 === 1 && me.overrides['2026-09-24'].hifz.s2 === 114 && me.overrides['2026-09-24'].hifz.a2 === 3
+    ? ok('manual amount pin intact {s1:113,a1:1,s2:114,a2:3}')
     : bad(`override wrong: ${JSON.stringify(me && me.overrides)}`);
   st2.settings.endDate === '2026-12-16' ? ok('settings change intact') : bad('settings lost');
   st2.activeId === sid ? ok('active student intact') : bad('activeId lost');

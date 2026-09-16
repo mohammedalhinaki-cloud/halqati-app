@@ -1,7 +1,7 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { buildPlan, weekKey, weekdayName, hijriInfo } from '../lib/plan';
-import { amountLabel, arNum, arDec, spanLabel, QPP, TOTAL_Q, AMOUNT_OPTS, ayahRangeQ } from '../lib/quran';
+import { amountLabel, arNum, arDec, rangeLabel, rangeFromSurahAyah, ayahRef, splitDose, toQ, QPP, AMOUNT_OPTS, SURAHS } from '../lib/quran';
 import { LEVELS } from '../lib/store';
 
 /** the student's chosen major-review dose (quarters); legacy fallback: نصف وجه */
@@ -19,13 +19,7 @@ const REV_STYLE = {
   none: { txt: 'لا يوجد', cls: 'bg-slate-200 text-slate-600 border-slate-400' },
 };
 const DAY_CELL = (r) =>
-  r.status === 'saved'
-    ? 'bg-emerald-50/70'
-    : r.status === 'missed'
-      ? 'bg-rose-50'
-      : r.status === 'absent'
-        ? 'bg-stone-100/60 text-stone-500'
-        : '';
+  r.status === 'saved' ? 'bg-emerald-50/70' : r.status === 'missed' ? 'bg-rose-50' : r.status === 'absent' ? 'bg-stone-100/60 text-stone-500' : '';
 
 function Stat({ label, value, cls }) {
   return (
@@ -36,64 +30,50 @@ function Stat({ label, value, cls }) {
   );
 }
 
-function ReviewCell({ cell, style, deferred, dueTxt }) {
-  const lbl = cell && cell.qLo != null && cell.qHi > cell.qLo ? spanLabel(cell.qLo, cell.qHi) : null;
-  const st = cell && cell.status ? style[cell.status] : null;
+/**
+ * The day's content, always rendered from the verified ayah range
+ * (row.gFrom..row.gTo) — never from a quarter-face number. The surah/ayah
+ * bounds are printed exactly as they come from lib/quran-data.js.
+ */
+function RangeText({ span, preview, amount }) {
+  if (!span || span.gFrom == null || span.gTo == null) return null;
+  const L = rangeLabel(span.gFrom, span.gTo);
   return (
-    <td className={'align-top text-[12px] leading-5 ' + (cell && (cell.status === 'missed' || cell.status === 'absent') ? 'bg-rose-50/60' : '')}>
-      {lbl ? (
-        <span className={cell.preview ? 'text-slate-400 italic' : 'font-bold text-slate-800'}>
-          سورة {lbl.surah} <span className="font-normal text-slate-500">{lbl.range}</span>
-          {cell.plannedQ > 0 && <span className="text-slate-400"> · {amountLabel(cell.plannedQ)}</span>}
-        </span>
-      ) : st ? (
-        <span className="font-bold text-rose-600">— {deferred}</span>
-      ) : (
-        <span className="text-slate-300">{dueTxt}</span>
-      )}
-      {st && <div className="mt-0.5"><span className={'inline-block rounded border px-1.5 py-0.5 text-[10px] font-extrabold ' + st.cls}>{st.txt}</span></div>}
-      {cell && cell.backlog > 0 && (
-        <div className="mt-0.5 inline-block rounded bg-violet-100 px-1.5 text-[10px] font-bold text-violet-800">
-          {amountLabel(cell.backlog)} كبرى مؤجَّلة — تنزاح، لا تُدمج
+    <>
+      <span className={preview ? 'italic text-slate-400' : 'font-bold text-slate-800'}>
+        سورة {L.head} <span className="font-normal text-slate-500">{L.detail}</span>
+        {amount > 0 && <span className="text-slate-400"> · {amountLabel(amount)}</span>}
+      </span>
+      {L.inRangeSurahEnds.map((e) => (
+        <div key={'e' + e.surah} className="mt-0.5 inline-block rounded bg-emerald-50 px-1.5 text-[10px] font-bold text-emerald-700">
+          ختام {e.name} — آخر آية ({arNum(e.ayah)})
         </div>
-      )}
-    </td>
-  );
-}
-
-function CtlBtns({ value, onPick, opts }) {
-  return (
-    <div className="flex flex-wrap justify-center gap-1 no-print">
-      {opts.map(([v, label, on]) => (
-        <button
-          key={v}
-          onClick={() => onPick(v)}
-          className={
-            'rounded-md border px-2 py-0.5 text-[10px] font-bold transition ' +
-            (value === v ? `${on} border-transparent text-white shadow` : 'border-slate-300 bg-white text-slate-500 hover:bg-slate-100')
-          }
-        >
-          {label}
-        </button>
       ))}
-    </div>
+      {L.inRangeSurahStarts.map((e) => (
+        <div key={'s' + e.surah} className="mt-0.5 inline-block rounded bg-sky-50 px-1.5 text-[10px] font-bold text-sky-700">
+          بداية {e.name} — الآية ١
+        </div>
+      ))}
+      {L.lastAyahOfMushaf && <div className="mt-0.5 inline-block rounded bg-violet-50 px-1.5 text-[10px] font-bold text-violet-700">آخر آية في المصحف</div>}
+    </>
   );
 }
 
-function MarkCell({ label, span, status, amount, style, preview, deferred, dueTxt, onPick, opts, badge, onEditAmount }) {
-  const lbl = span && span.qLo != null && span.qHi > span.qLo ? spanLabel(span.qLo, span.qHi) : null;
+function MarkCell({ label, span, status, amount, style, preview, deferred, dueTxt, onPick, opts, badge, onEditAmount, anchor }) {
   const st = status ? style[status] : null;
   return (
     <td className={'align-top border-r border-slate-100 ' + (status === 'missed' || status === 'absent' || status === 'none' ? 'bg-rose-50/60' : status === 'done' || status === 'saved' ? 'bg-emerald-50/50' : '')}>
       <div className="mb-0.5 flex items-center justify-between text-[10px] font-extrabold tracking-wide text-slate-400">
         <span>{label}</span>
-        {onEditAmount && <button type="button" onClick={onEditAmount} className="rounded px-1 text-base leading-3 text-slate-500 hover:bg-slate-200" aria-label="تعديل مقدار الخلية">⋮</button>}
+        {onEditAmount && anchor && (
+          <button type="button" onClick={onEditAmount} className="rounded px-1 text-base leading-3 text-slate-500 hover:bg-slate-200" aria-label="تعديل مقدار الخلية">
+            ⋮
+          </button>
+        )}
       </div>
       <div className="text-[12px] leading-5">
-        {lbl ? (
-          <span className={preview ? 'italic text-slate-400' : 'font-bold text-slate-800'}>
-            {span.amountTxt ? span.amountTxt + ' — ' : ''}سورة {lbl.surah} <span className="font-normal text-slate-500">{lbl.range}</span>
-          </span>
+        {span && span.gFrom != null ? (
+          <RangeText span={span} preview={preview} amount={amount} />
         ) : st ? (
           <span className="font-bold text-rose-600">— {deferred}</span>
         ) : (
@@ -103,7 +83,6 @@ function MarkCell({ label, span, status, amount, style, preview, deferred, dueTx
       <div className="mt-0.5 flex flex-wrap items-center gap-1">
         {st && <span className={'rounded border px-1.5 py-0.5 text-[10px] font-extrabold ' + st.cls}>{st.txt}</span>}
         {preview && !st && <span className="rounded bg-slate-100 px-1.5 text-[10px] font-bold text-slate-500">معاينة مجدولة</span>}
-        {amount != null && amount > 0 && !st && <span className="text-[11px] font-extrabold text-slate-600">{amountLabel(amount)}</span>}
         {badge}
       </div>
       {onPick && (
@@ -123,7 +102,7 @@ function MarkCell({ label, span, status, amount, style, preview, deferred, dueTx
   );
 }
 
-function DayRow({ row, student, onStatus, onEditAmount }) {
+function DayRow({ row, student, onStatus, onEditAmount, hifzLimit }) {
   const hj = hijriInfo(row.date);
   const pick = (stream, v) => {
     const cur = stream === 'hifz' ? row.status : row[stream] && row[stream].status;
@@ -142,12 +121,8 @@ function DayRow({ row, student, onStatus, onEditAmount }) {
   ];
   // الكبرى only: «لا يوجد» behaves exactly like «غائب/لم تتم» — the day is
   // marked, its slot is burned, and the ride slides one day (never merged).
-  const RM = [
-    ['done', 'تم', 'bg-emerald-600'],
-    ['missed', 'لم تتم', 'bg-rose-600'],
-    ['absent', 'غائب', 'bg-stone-500'],
-    ['none', 'لا يوجد', 'bg-slate-500'],
-  ];
+  const RM = [...R, ['none', 'لا يوجد', 'bg-slate-500']];
+  const dir = row.direction === 'desc' ? -1 : 1;
   return (
     <tr className={DAY_CELL(row)}>
       <td className="font-bold whitespace-nowrap">{weekdayName(row.date)}</td>
@@ -155,13 +130,11 @@ function DayRow({ row, student, onStatus, onEditAmount }) {
         <div className="text-[13px] font-extrabold text-slate-800">{hj.dm}</div>
         <div className="text-[10px] text-slate-400">{hj.y}</div>
         {row.beyondPlan && <div className="text-[10px] font-bold text-rose-600">يوم إضافي بعد الخطة</div>}
-        {row.shiftedBy > 0 && (
-          <div className="mt-0.5 rounded bg-amber-100 px-1 text-[9px] font-bold text-amber-800">متأخرة {arNum(row.shiftedBy)} يوم</div>
-        )}
+        {row.shiftedBy > 0 && <div className="mt-0.5 rounded bg-amber-100 px-1 text-[9px] font-bold text-amber-800">متأخرة {arNum(row.shiftedBy)} يوم</div>}
       </td>
       <MarkCell
         label="حفظ جديد"
-        span={{ qLo: row.qLo, qHi: row.qHi }}
+        span={{ gFrom: row.gFrom, gTo: row.gTo }}
         status={row.status}
         amount={row.amountQ}
         style={HIFZ_STYLE}
@@ -170,15 +143,12 @@ function DayRow({ row, student, onStatus, onEditAmount }) {
         onPick={(v) => pick('hifz', v)}
         opts={H}
         onEditAmount={() => editAmount('hifz')}
-        badge={
-          row.rolledToNext > 0 ? (
-            <span className="rounded bg-rose-100 px-1.5 text-[10px] font-bold text-rose-700">↩ {amountLabel(row.rolledToNext)} ينزاح لغد — بدون دمج</span>
-          ) : null
-        }
+        anchor={row.gFrom != null ? { startG: row.gFrom, limitG: hifzLimit, dir } : null}
+        badge={row.rolledToNext > 0 ? <span className="rounded bg-rose-100 px-1.5 text-[10px] font-bold text-rose-700">↩ {amountLabel(row.rolledToNext)} ينزاح لغد — بدون دمج</span> : null}
       />
       <MarkCell
         label="مراجعة صغرى (من حفظ الأمس)"
-        span={row.minor ? { qLo: row.minor.qLo, qHi: row.minor.qHi } : null}
+        span={row.minor ? { gFrom: row.minor.gFrom, gTo: row.minor.gTo } : null}
         status={row.minor && row.minor.status}
         amount={row.minor && row.minor.plannedQ}
         style={REV_STYLE}
@@ -187,6 +157,7 @@ function DayRow({ row, student, onStatus, onEditAmount }) {
         onPick={(v) => pick('minor', v)}
         opts={R}
         onEditAmount={() => editAmount('minor')}
+        anchor={row.minor && row.minor.gFrom != null ? { startG: row.minor.gFrom, limitG: row.minor.limitG != null ? row.minor.limitG : row.minor.gTo, dir } : null}
         badge={
           row.minor && row.minor.plannedQ > 0 && !row.minor.status ? (
             <span className="rounded bg-sky-100 px-1.5 text-[10px] font-bold text-sky-700">
@@ -200,7 +171,7 @@ function DayRow({ row, student, onStatus, onEditAmount }) {
       {student.majorEnabled ? (
         <MarkCell
           label="مراجعة كبرى"
-          span={row.major ? { qLo: row.major.qLo, qHi: row.major.qHi } : null}
+          span={row.major ? { gFrom: row.major.gFrom, gTo: row.major.gTo } : null}
           status={row.major && row.major.status}
           amount={row.major && row.major.plannedQ}
           preview={row.major && row.major.preview}
@@ -210,6 +181,7 @@ function DayRow({ row, student, onStatus, onEditAmount }) {
           onPick={(v) => pick('major', v)}
           opts={RM}
           onEditAmount={() => editAmount('major')}
+          anchor={row.major && row.major.gFrom != null ? { startG: row.major.gFrom, limitG: 1, dir: -1 } : null}
           badge={row.major && row.major.cycle > 1 ? <span className="rounded bg-violet-100 px-1.5 text-[10px] font-bold text-violet-800">الدورة {arNum(row.major.cycle)}</span> : null}
         />
       ) : null}
@@ -218,29 +190,89 @@ function DayRow({ row, student, onStatus, onEditAmount }) {
 }
 
 export default function StudentPlan({ student, settings, onStatus, onClear, onEdit, onAmountOverride }) {
-  const plan = useMemo(() => buildPlan(student, settings), [student, settings]);
-  const { rows, stats, totalQ, savedQ, range } = plan;
+  /** buildPlan audits every range before returning; a failed audit is shown, never hidden */
+  const { plan, buildError } = useMemo(() => {
+    try {
+      return { plan: buildPlan(student, settings), buildError: null };
+    } catch (e) {
+      return { plan: null, buildError: e };
+    }
+  }, [student, settings]);
+
   const [edit, setEdit] = useState(null);
   const [amountEdit, setAmountEdit] = useState(null);
   const [custom, setCustom] = useState({ surah: '114', from: '1', toSurah: '114', to: '6' });
+  const [customErr, setCustomErr] = useState('');
 
   const weeks = useMemo(() => {
+    if (!plan) return [];
     const m = [];
-    for (const r of rows) {
+    for (const r of plan.rows) {
       const k = weekKey(r.date);
       const last = m[m.length - 1];
       if (last && last.key === k) last.rows.push(r);
       else m.push({ key: k, rows: [r] });
     }
     return m;
-  }, [rows]);
+  }, [plan]);
 
+  if (!plan) {
+    return (
+      <section className="card border-2 border-rose-300 p-4" aria-label={`خطة ${student.name}`}>
+        <h3 className="text-lg font-extrabold text-rose-800">تعذّر عرض الجدول — لم تُجتَز مراجعة بيانات الآيات</h3>
+        <p className="mt-2 text-sm text-rose-700">{buildError && buildError.message}</p>
+        <p className="mt-2 text-xs text-slate-500">
+          لم يُعرض جدول غير موثوق. راجع <code dir="ltr">data/sources/</code> ونفّذ <code dir="ltr">npm run gen</code> للتأكد من سلامة بيانات القرآن.
+        </p>
+      </section>
+    );
+  }
+
+  const { rows, stats, totalQ, savedQ, range } = plan;
   const pct = totalQ > 0 ? Math.min(100, Math.round((savedQ / totalQ) * 100)) : 0;
   const level = LEVELS[student.level] || { label: student.level };
   const cols = student.majorEnabled ? 5 : 4;
   const dirChip = plan.descending
-    ? { txt: 'اتجاه الحفظ: تنازلي ↓ (المِرآة فعّالة)', cls: 'bg-amber-50 text-amber-800 border border-amber-200' }
-    : { txt: 'اتجاه الحفظ: تصاعدي ↑ (عادي، بدون مرآة)', cls: 'bg-emerald-50 text-emerald-800 border border-emerald-200' };
+    ? { txt: 'اتجاه الحفظ: تنازلي ↓', cls: 'bg-amber-50 text-amber-800 border border-amber-200' }
+    : { txt: 'اتجاه الحفظ: تصاعدي ↑', cls: 'bg-emerald-50 text-emerald-800 border border-emerald-200' };
+
+  /* limits used when the teacher pins a manual amount: whole ayahs only */
+  const hifzLimit = plan.dir > 0 ? plan.hiG : plan.loG;
+
+  /** open the amount dialog anchored on a cell's own content */
+  const openAmount = (row, stream) => {
+    const cell = stream === 'hifz' ? { gFrom: row.gFrom, gTo: row.gTo } : row[stream] || {};
+    if (cell.gFrom == null) return; // nothing to anchor on: nothing to pin
+    setCustomErr('');
+    setAmountEdit({ row, stream, startG: cell.gFrom, limitG: stream === 'major' ? 1 : stream === 'minor' ? (row.minor.limitG ?? cell.gTo) : hifzLimit, dir: stream === 'major' ? -1 : row.direction === 'desc' ? -1 : 1 });
+  };
+
+  /** pin a dose for this cell — the range is computed from the verified data */
+  const pinDose = (faces) => {
+    const { row, stream, startG, limitG, dir } = amountEdit;
+    const to = splitDose(startG, limitG, toQ(faces), dir);
+    if (to == null) return;
+    const a = ayahRef(startG);
+    const b = ayahRef(to);
+    onAmountOverride(row.date, stream, { s1: a.surah, a1: a.ayah, s2: b.surah, a2: b.ayah });
+    setAmountEdit(null);
+  };
+
+  /** custom «من آية إلى آية» — validated against the real ayah counts (never clamped) */
+  const pinCustom = () => {
+    try {
+      rangeFromSurahAyah(custom.surah, custom.from, custom.toSurah, custom.to);
+      onAmountOverride(amountEdit.row.date, amountEdit.stream, {
+        s1: Number(custom.surah),
+        a1: Number(custom.from),
+        s2: Number(custom.toSurah),
+        a2: Number(custom.to),
+      });
+      setAmountEdit(null);
+    } catch (e) {
+      setCustomErr(e.message);
+    }
+  };
 
   return (
     <section className="card p-4" aria-label={`خطة ${student.name}`}>
@@ -250,14 +282,15 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
           <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] font-bold">
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">{level.label}</span>
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">{student.halaqa}</span>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600" dir="ltr">
-              ☎ {student.phone}
-            </span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600" dir="ltr">☎ {student.phone}</span>
             <span className={'rounded-full px-2 py-0.5 ' + dirChip.cls}>{dirChip.txt}</span>
-            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700">صغرى: من طابور حفظ الأمس فقط — أول يوم فارغ، ولا تُعلَّم تلقائيًا</span>
+            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">
+              تدقيق آلي: {arNum(plan.audit.checked)} مدى آيات متحقَّق منه قبل العرض
+            </span>
+            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700">صغرى: من طابور حفظ الأمس فقط — أول يوم فارغ</span>
             {student.majorEnabled ? (
               <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">
-                كبرى: {amountLabel(majorBaseQOf(student))} يوميًا — تلقائية من الناس ← الفاتحة
+                كبرى: {amountLabel(majorBaseQOf(student))} يوميًا — من الناس ← الفاتحة
               </span>
             ) : (
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-400">كبرى: غير مفعّلة</span>
@@ -274,13 +307,21 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
             </button>
           )}
           <div className="text-xs text-slate-500">
-            المدى: <b className="text-slate-800">{range.fromSurah} ← {range.toSurah}</b> = <b className="text-slate-800">{arDec(range.faces)}</b> وجهًا · <b className="text-slate-800">{arNum(range.planDays)}</b> يوم دراسة
+            المدى: <b className="text-slate-800">{range.first.name} — الآية {arNum(range.first.ayah)}</b> ←{' '}
+            <b className="text-slate-800">{range.last.name} — الآية {arNum(range.last.ayah)}</b> ={' '}
+            <b className="text-slate-800">{arDec(range.faces)}</b> وجهًا · <b className="text-slate-800">{arNum(range.planDays)}</b> يوم دراسة
           </div>
           <button onClick={() => window.print()} className="btn mt-1 border border-slate-300 bg-white text-slate-600 hover:bg-slate-100 no-print">
             🖨 طباعة البطاقة
           </button>
         </div>
       </div>
+
+      {plan.issues.length > 0 && (
+        <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+          ملاحظات على البيانات المدخلة: {plan.issues.join(' · ')}
+        </div>
+      )}
 
       <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
         <Stat label="أيام حُفظت" value={arNum(stats.saved)} cls="border-emerald-200 bg-emerald-50 text-emerald-800" />
@@ -307,7 +348,7 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
 
       {plan.shiftedBy > 0 && (
         <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
-          بسبب {arNum(plan.shiftedBy)} يوم تأجيل، انزاحت الخطة {arNum(plan.shiftedBy)} يومًا للأمام — لم يُدمج أي مقدار في يوم واحد، وسيُستكمل المتبقي بعد نهاية الخطة تلقائيًا.
+          بسبب {arNum(plan.shiftedBy)} يوم تأجيل، انزاحت الخطة {arNum(plan.shiftedBy)} يومًا للأمام — لم يُدمج أي مقدار في يوم واحد، ولم تُقفز أي آية: كل يوم يعيد نفس نطاق الآيات غير المحفوظة.
         </div>
       )}
 
@@ -325,16 +366,14 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
           <tbody>
             {weeks.length === 0 && (
               <tr>
-                <td colSpan={cols} className="py-6 text-slate-400">
-                  لا توجد أيام في هذه الفترة — عدّل تواريخ البداية/النهاية.
-                </td>
+                <td colSpan={cols} className="py-6 text-slate-400">لا توجد أيام في هذه الفترة — عدّل تواريخ البداية/النهاية.</td>
               </tr>
             )}
             {weeks.map((w, wi) => {
               const dayRows = w.rows.filter((r) => r.type === 'day');
               const s = { saved: 0, missed: 0, absent: 0 };
               dayRows.forEach((r) => r.status && s[r.status]++);
-              return <FragmentWeek key={w.key} n={wi + 1} w={w} s={s} dayRows={dayRows} onStatus={onStatus} onEditAmount={(row, stream) => setAmountEdit({ row, stream })} student={student} cols={cols} />;
+              return <FragmentWeek key={w.key} n={wi + 1} w={w} s={s} dayRows={dayRows} onStatus={onStatus} onEditAmount={openAmount} student={student} cols={cols} hifzLimit={hifzLimit} />;
             })}
           </tbody>
           <tfoot>
@@ -348,42 +387,45 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
       </div>
 
       <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-        <span>كل سجل مستقل: «لم يحفظ/لم تتم/غائب/لا يوجد» يبقي يومه معلَّمًا ويؤجّله يومًا كاملًا — الخطة تنزاح ولا تُدمج. الصغرى تُغذَّى من حفظ الأمس فقط: لا شيء في أول يوم، وتبقى معلّقة حتى تعلّمها «تم». مقدار الكبرى تختاره أنت مثل ورد الحفظ.</span>
-        <button
-          onClick={() => confirm('مسح كل حالات الأيام لهذا الطالب؟') && onClear(student.id)}
-          className="btn border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 no-print"
-        >
+        <span>
+          كل نطاق في الجدول مجموعة آيات كاملة مرتَّبة: لا يُقسم آية ولا يُكرَّر نطاق ولا يُتجاوز عدد آيات السورة. المصدر: بيانات QCF4 (مصحف المدينة ١٤٤١هـ) + بيانات تنزيل، مُدقَّقة آليًا. «لم يحفظ/غائب/لم تتم/لا يوجد» يبقي يومه معلَّمًا ويؤجّله يومًا كاملًا — الخطة تنزاح ولا تُدمج.
+        </span>
+        <button onClick={() => confirm('مسح كل حالات الأيام لهذا الطالب؟') && onClear(student.id)} className="btn border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 no-print">
           إعادة تعيين الحالات
         </button>
       </div>
+
       {amountEdit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-sm rounded-xl bg-white p-4 shadow-2xl" dir="rtl">
-            <div className="mb-3 flex items-center justify-between"><h4 className="font-extrabold">تعديل مقدار {amountEdit.stream === 'hifz' ? 'الحفظ' : amountEdit.stream === 'minor' ? 'المراجعة الصغرى' : 'المراجعة الكبرى'}</h4><button onClick={() => setAmountEdit(null)} className="text-xl text-slate-400">×</button></div>
-            <p className="mb-2 text-xs text-slate-500">
-              {amountEdit.stream === 'major'
-                ? `سيُعاد توليد الأيام التالية بقدر الكبرى الأصلي للطالب: ${amountLabel(majorBaseQOf(student))}`
-                : `سيُعاد توليد الأيام التالية بقدر الطالب الأصلي: ${amountLabel(Math.round((student.dailyHifz || .25) * QPP))}`}
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {AMOUNT_OPTS.map((o) => <button key={o.v} onClick={() => {
-                const r = amountEdit.row; const st = amountEdit.stream;
-                // anchor on the edited cell's OWN span (major rides down from الناس:
-                // pin qHi and grow toward qLo; minor/hifz-asc pin qLo and grow up)
-                const c = st === 'hifz' || !r[st] || r[st].qLo == null ? { qLo: r.qLo, qHi: r.qHi } : { qLo: r[st].qLo, qHi: r[st].qHi };
-                const fin = (v) => v != null && Number.isFinite(Number(v));
-                const amtQ = Math.round(o.v * QPP);
-                const descend = st === 'major' ? true : st === 'minor' ? false : r.direction === 'desc';
-                // no span to anchor on -> emit an invalid override the planner ignores
-                const span = !fin(c.qLo) && !fin(c.qHi)
-                  ? { qLo: undefined, qHi: undefined }
-                  : descend
-                    ? { qLo: Math.max(0, (fin(c.qHi) ? Number(c.qHi) : TOTAL_Q) - amtQ), qHi: fin(c.qHi) ? Number(c.qHi) : TOTAL_Q }
-                    : { qLo: fin(c.qLo) ? Number(c.qLo) : 0, qHi: Math.min(TOTAL_Q, (fin(c.qLo) ? Number(c.qLo) : 0) + amtQ) };
-                onAmountOverride(r.date, st, span); setAmountEdit(null);
-              }} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold hover:bg-emerald-50">{o.label}</button>)}
+          <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-2xl" dir="rtl">
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="font-extrabold">تعديل مقدار {amountEdit.stream === 'hifz' ? 'الحفظ' : amountEdit.stream === 'minor' ? 'المراجعة الصغرى' : 'المراجعة الكبرى'}</h4>
+              <button onClick={() => setAmountEdit(null)} className="text-xl text-slate-400">×</button>
             </div>
-            <div className="mt-4 border-t pt-3"><div className="mb-2 text-xs font-bold text-slate-500">مخصص من آية إلى آية</div><div className="grid grid-cols-2 gap-2"><input value={custom.surah} onChange={(e) => setCustom({ ...custom, surah: e.target.value })} placeholder="السورة (رقم)" className="rounded border p-2 text-sm" /><input value={custom.from} onChange={(e) => setCustom({ ...custom, from: e.target.value })} placeholder="من آية" className="rounded border p-2 text-sm" /><input value={custom.toSurah} onChange={(e) => setCustom({ ...custom, toSurah: e.target.value })} placeholder="إلى سورة" className="rounded border p-2 text-sm" /><input value={custom.to} onChange={(e) => setCustom({ ...custom, to: e.target.value })} placeholder="إلى آية" className="rounded border p-2 text-sm" /></div><button onClick={() => { const s = ayahRangeQ(custom.surah, custom.from, custom.toSurah, custom.to); if (s) { onAmountOverride(amountEdit.row.date, amountEdit.stream, s); setAmountEdit(null); } }} className="mt-2 w-full rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white">تثبيت المقدار المخصص</button></div>
+            <p className="mb-2 text-xs text-slate-500">
+              يبدأ المقدار من نطاق الخلية الحالي (<b className="text-slate-700">{rangeLabel(amountEdit.startG, amountEdit.startG).head} — الآية {arNum(ayahRef(amountEdit.startG).ayah)}</b>)، ويُبنى على <b>آيات كاملة</b> فقط من نفس المصدر الموثّق؛ والأيام التالية تُعاد جدولتها من نهاية المقدار المثبَّت.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {AMOUNT_OPTS.map((o) => (
+                <button key={o.v} onClick={() => pinDose(o.v)} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold hover:bg-emerald-50">
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 border-t pt-3">
+              <div className="mb-2 text-xs font-bold text-slate-500">مخصص من آية إلى آية (يُتحقق من عدد آيات السورة)</div>
+              <div className="grid grid-cols-4 gap-2">
+                <input value={custom.surah} onChange={(e) => setCustom({ ...custom, surah: e.target.value })} placeholder="سورة (١–١١٤)" className="rounded border p-2 text-sm" inputMode="numeric" />
+                <input value={custom.from} onChange={(e) => setCustom({ ...custom, from: e.target.value })} placeholder="من آية" className="rounded border p-2 text-sm" inputMode="numeric" />
+                <input value={custom.toSurah} onChange={(e) => setCustom({ ...custom, toSurah: e.target.value })} placeholder="إلى سورة" className="rounded border p-2 text-sm" inputMode="numeric" />
+                <input value={custom.to} onChange={(e) => setCustom({ ...custom, to: e.target.value })} placeholder="إلى آية" className="rounded border p-2 text-sm" inputMode="numeric" />
+              </div>
+              <div className="mt-1 text-[11px] text-slate-400">
+                أمثلة: الفلق عدد آياتها {arNum(SURAHS[112].count)} · الناس {arNum(SURAHS[113].count)} · النصر {arNum(SURAHS[109].count)} — تُرفض أي آية أكبر من ذلك.
+              </div>
+              {customErr && <div className="mt-2 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-[12px] font-bold text-rose-700">{customErr}</div>}
+              <button onClick={pinCustom} className="mt-2 w-full rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white">تثبيت المقدار المخصص</button>
+            </div>
           </div>
         </div>
       )}
@@ -391,12 +433,12 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
   );
 }
 
-function FragmentWeek({ n, w, s, dayRows, student, cols, onStatus, onEditAmount }) {
+function FragmentWeek({ n, w, s, dayRows, student, cols, onStatus, onEditAmount, hifzLimit }) {
   const fr = w.rows[0],
     lr = w.rows[w.rows.length - 1];
   const range = !fr ? '' : fr.date === lr.date ? hijriInfo(fr.date).dm : `${hijriInfo(fr.date).dm} ← ${hijriInfo(lr.date).dm}`;
   return (
-    <>
+    <Fragment>
       <tr className="bg-slate-200/70 text-[12px] font-extrabold text-slate-700">
         <td colSpan={cols} className="text-right">
           الأسبوع {arNum(n)} <span className="font-normal text-slate-500">· {range}</span>
@@ -410,16 +452,14 @@ function FragmentWeek({ n, w, s, dayRows, student, cols, onStatus, onEditAmount 
             </td>
           </tr>
         ) : (
-          <DayRow key={r.date} row={r} student={student} onStatus={onStatus} onEditAmount={onEditAmount} />
+          <DayRow key={r.date} row={r} student={student} onStatus={onStatus} onEditAmount={onEditAmount} hifzLimit={hifzLimit} />
         )
       )}
       <tr className="bg-slate-100 text-[12px] font-extrabold">
         <td colSpan={cols} className="text-right">
-          نتيجة الفترة: حفظ <span className="text-emerald-700">{arNum(s.saved)}</span> · لم يحفظ{' '}
-          <span className="text-rose-600">{arNum(s.missed)}</span> · غياب <span className="text-stone-600">{arNum(s.absent)}</span> · الأيام:{' '}
-          <span className="text-slate-700">{arNum(dayRows.length)}</span>
+          نتيجة الفترة: حفظ <span className="text-emerald-700">{arNum(s.saved)}</span> · لم يحفظ <span className="text-rose-600">{arNum(s.missed)}</span> · غياب <span className="text-stone-600">{arNum(s.absent)}</span> · الأيام: <span className="text-slate-700">{arNum(dayRows.length)}</span>
         </td>
       </tr>
-    </>
+    </Fragment>
   );
 }
