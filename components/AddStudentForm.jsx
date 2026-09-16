@@ -29,7 +29,7 @@ export default function AddStudentForm({ onAdd }) {
   const [f, setF] = useState({
     name: '',
     phone: '',
-    level: 'ibtida-i',
+    level: 'الأول',
     halaqa: '',
     dailyHifz: 0.25,
     from: 1,
@@ -68,7 +68,7 @@ export default function AddStudentForm({ onAdd }) {
           <select className="field" value={f.level} onChange={(e) => setLevel(e.target.value)}>
             {Object.entries(LEVELS).map(([k, v]) => (
               <option key={k} value={k}>
-                {v.label} — {v.hint}
+                {v.label}
               </option>
             ))}
           </select>

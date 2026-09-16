@@ -144,7 +144,7 @@ export default function SettingsCard({ settings, onChange }) {
           </>
         )}
         <span className="ms-1 text-slate-500">
-          أيام الدراسة: <b className="text-slate-800">{arNum(days)}</b> — التخزين خلفيًا ميلادي (YYYY-MM-DD) والعرض هجري أم القرى دائمًا.
+          أيام الدراسة: <b className="text-slate-800">{arNum(days)}</b>
         </span>
       </div>
     </section>
