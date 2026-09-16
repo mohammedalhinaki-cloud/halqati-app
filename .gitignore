@@ -8,5 +8,16 @@ build/
 
 out-root/
 out-v3/
-.tmp-render-test.mjs
 .tmp-*.mjs
+.tmp-*.sqlite
+
+# --- Capacitor / Android: keep the project sources, ignore build output ---
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/captures/
+android/.idea/
+android/key.properties
+android/**/build/
+*.apk
