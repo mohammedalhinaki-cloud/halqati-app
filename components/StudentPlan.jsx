@@ -1,8 +1,11 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { buildPlan, weekKey, weekdayName, hijriInfo } from '../lib/plan';
-import { amountLabel, arNum, arDec, spanLabel, QPP, AMOUNT_OPTS, ayahRangeQ } from '../lib/quran';
+import { amountLabel, arNum, arDec, spanLabel, QPP, TOTAL_Q, AMOUNT_OPTS, ayahRangeQ } from '../lib/quran';
 import { LEVELS } from '../lib/store';
+
+/** the student's chosen major-review dose (quarters); legacy fallback: نصف وجه */
+const majorBaseQOf = (student) => (Number(student.majorBaseQ) > 0 ? Number(student.majorBaseQ) : 2);
 
 const HIFZ_STYLE = {
   saved: { txt: '✓ حفظ', cls: 'bg-emerald-100 text-emerald-800 border-emerald-600' },
@@ -13,6 +16,7 @@ const REV_STYLE = {
   done: { txt: '✓ تمت', cls: 'bg-emerald-100 text-emerald-800 border-emerald-600' },
   missed: { txt: '✗ لم تتم', cls: 'bg-rose-100 text-rose-700 border-rose-500' },
   absent: { txt: 'غائب', cls: 'bg-stone-200 text-stone-600 border-stone-400' },
+  none: { txt: 'لا يوجد', cls: 'bg-slate-200 text-slate-600 border-slate-400' },
 };
 const DAY_CELL = (r) =>
   r.status === 'saved'
@@ -80,7 +84,7 @@ function MarkCell({ label, span, status, amount, style, preview, deferred, dueTx
   const lbl = span && span.qLo != null && span.qHi > span.qLo ? spanLabel(span.qLo, span.qHi) : null;
   const st = status ? style[status] : null;
   return (
-    <td className={'align-top border-r border-slate-100 ' + (status === 'missed' || status === 'absent' ? 'bg-rose-50/60' : status === 'done' || status === 'saved' ? 'bg-emerald-50/50' : '')}>
+    <td className={'align-top border-r border-slate-100 ' + (status === 'missed' || status === 'absent' || status === 'none' ? 'bg-rose-50/60' : status === 'done' || status === 'saved' ? 'bg-emerald-50/50' : '')}>
       <div className="mb-0.5 flex items-center justify-between text-[10px] font-extrabold tracking-wide text-slate-400">
         <span>{label}</span>
         {onEditAmount && <button type="button" onClick={onEditAmount} className="rounded px-1 text-base leading-3 text-slate-500 hover:bg-slate-200" aria-label="تعديل مقدار الخلية">⋮</button>}
@@ -135,6 +139,14 @@ function DayRow({ row, student, onStatus, onEditAmount }) {
     ['done', 'تم', 'bg-emerald-600'],
     ['missed', 'لم تتم', 'bg-rose-600'],
     ['absent', 'غائب', 'bg-stone-500'],
+  ];
+  // الكبرى only: «لا يوجد» behaves exactly like «غائب/لم تتم» — the day is
+  // marked, its slot is burned, and the ride slides one day (never merged).
+  const RM = [
+    ['done', 'تم', 'bg-emerald-600'],
+    ['missed', 'لم تتم', 'bg-rose-600'],
+    ['absent', 'غائب', 'bg-stone-500'],
+    ['none', 'لا يوجد', 'bg-slate-500'],
   ];
   return (
     <tr className={DAY_CELL(row)}>
@@ -196,7 +208,7 @@ function DayRow({ row, student, onStatus, onEditAmount }) {
           deferred="انزاحت لغد — الحفظ لم يتأثر"
           dueTxt="—"
           onPick={(v) => pick('major', v)}
-          opts={R}
+          opts={RM}
           onEditAmount={() => editAmount('major')}
           badge={row.major && row.major.cycle > 1 ? <span className="rounded bg-violet-100 px-1.5 text-[10px] font-bold text-violet-800">الدورة {arNum(row.major.cycle)}</span> : null}
         />
@@ -245,7 +257,7 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
             <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700">صغرى: من طابور حفظ الأمس فقط — أول يوم فارغ، ولا تُعلَّم تلقائيًا</span>
             {student.majorEnabled ? (
               <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">
-                كبرى: تلقائية من الناس ← الفاتحة
+                كبرى: {amountLabel(majorBaseQOf(student))} يوميًا — تلقائية من الناس ← الفاتحة
               </span>
             ) : (
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-400">كبرى: غير مفعّلة</span>
@@ -285,7 +297,7 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
       {student.majorEnabled && (
         <div className="mb-3 flex flex-wrap gap-2 text-[11px] font-bold text-violet-700">
           <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5">
-            كبرى — تمت: {arNum(stats.major.saved)} · لم تتم: {arNum(stats.major.missed)} · غياب: {arNum(stats.major.absent)} · روجع {arDec(stats.major.savedQ / QPP)} وجهًا
+            كبرى — تمت: {arNum(stats.major.saved)} · لم تتم: {arNum(stats.major.missed)} · غياب: {arNum(stats.major.absent)} · لا يوجد: {arNum(stats.major.none)} · روجع {arDec(stats.major.savedQ / QPP)} وجهًا
           </span>
         </div>
       )}
@@ -336,7 +348,7 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
       </div>
 
       <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-        <span>كل سجل مستقل: «لم يحفظ/لم تتم/غائب» يبقي يومه أحمر ويؤجّله يومًا كاملًا — الخطة تنزاح ولا تُدمج. الصغرى تُغذَّى من حفظ الأمس فقط: لا شيء في أول يوم، وتبقى معلّقة حتى تعلّمها «تم».</span>
+        <span>كل سجل مستقل: «لم يحفظ/لم تتم/غائب/لا يوجد» يبقي يومه معلَّمًا ويؤجّله يومًا كاملًا — الخطة تنزاح ولا تُدمج. الصغرى تُغذَّى من حفظ الأمس فقط: لا شيء في أول يوم، وتبقى معلّقة حتى تعلّمها «تم». مقدار الكبرى تختاره أنت مثل ورد الحفظ.</span>
         <button
           onClick={() => confirm('مسح كل حالات الأيام لهذا الطالب؟') && onClear(student.id)}
           className="btn border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 no-print"
@@ -348,14 +360,30 @@ export default function StudentPlan({ student, settings, onStatus, onClear, onEd
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" role="dialog" aria-modal="true">
           <div className="w-full max-w-sm rounded-xl bg-white p-4 shadow-2xl" dir="rtl">
             <div className="mb-3 flex items-center justify-between"><h4 className="font-extrabold">تعديل مقدار {amountEdit.stream === 'hifz' ? 'الحفظ' : amountEdit.stream === 'minor' ? 'المراجعة الصغرى' : 'المراجعة الكبرى'}</h4><button onClick={() => setAmountEdit(null)} className="text-xl text-slate-400">×</button></div>
-            <p className="mb-2 text-xs text-slate-500">سيُعاد توليد الأيام التالية بقدر الطالب الأصلي: {amountLabel(Math.round((student.dailyHifz || .25) * QPP))}</p>
+            <p className="mb-2 text-xs text-slate-500">
+              {amountEdit.stream === 'major'
+                ? `سيُعاد توليد الأيام التالية بقدر الكبرى الأصلي للطالب: ${amountLabel(majorBaseQOf(student))}`
+                : `سيُعاد توليد الأيام التالية بقدر الطالب الأصلي: ${amountLabel(Math.round((student.dailyHifz || .25) * QPP))}`}
+            </p>
             <div className="grid grid-cols-2 gap-2">
-              {AMOUNT_OPTS.filter((o) => o.v !== .75 || true).map((o) => <button key={o.v} onClick={() => {
-                const r = amountEdit.row; const end = r.qHi; const start = r.direction === 'desc' ? Math.max(0, end - Math.round(o.v * QPP)) : r.qLo; const span = r.direction === 'desc' ? { qLo: start, qHi: end } : { qLo: start, qHi: Math.min(2416, start + Math.round(o.v * QPP)) };
-                onAmountOverride(amountEdit.row.date, amountEdit.stream, span); setAmountEdit(null);
+              {AMOUNT_OPTS.map((o) => <button key={o.v} onClick={() => {
+                const r = amountEdit.row; const st = amountEdit.stream;
+                // anchor on the edited cell's OWN span (major rides down from الناس:
+                // pin qHi and grow toward qLo; minor/hifz-asc pin qLo and grow up)
+                const c = st === 'hifz' || !r[st] || r[st].qLo == null ? { qLo: r.qLo, qHi: r.qHi } : { qLo: r[st].qLo, qHi: r[st].qHi };
+                const fin = (v) => v != null && Number.isFinite(Number(v));
+                const amtQ = Math.round(o.v * QPP);
+                const descend = st === 'major' ? true : st === 'minor' ? false : r.direction === 'desc';
+                // no span to anchor on -> emit an invalid override the planner ignores
+                const span = !fin(c.qLo) && !fin(c.qHi)
+                  ? { qLo: undefined, qHi: undefined }
+                  : descend
+                    ? { qLo: Math.max(0, (fin(c.qHi) ? Number(c.qHi) : TOTAL_Q) - amtQ), qHi: fin(c.qHi) ? Number(c.qHi) : TOTAL_Q }
+                    : { qLo: fin(c.qLo) ? Number(c.qLo) : 0, qHi: Math.min(TOTAL_Q, (fin(c.qLo) ? Number(c.qLo) : 0) + amtQ) };
+                onAmountOverride(r.date, st, span); setAmountEdit(null);
               }} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold hover:bg-emerald-50">{o.label}</button>)}
             </div>
-            <div className="mt-4 border-t pt-3"><div className="mb-2 text-xs font-bold text-slate-500">مخصص من آية إلى آية</div><div className="grid grid-cols-2 gap-2"><input value={custom.surah} onChange={(e) => setCustom({ ...custom, surah: e.target.value })} placeholder="السورة (رقم)" className="rounded border p-2 text-sm" /><input value={custom.from} onChange={(e) => setCustom({ ...custom, from: e.target.value })} placeholder="من آية" className="rounded border p-2 text-sm" /><input value={custom.toSurah} onChange={(e) => setCustom({ ...custom, toSurah: e.target.value })} placeholder="إلى سورة" className="rounded border p-2 text-sm" /><input value={custom.to} onChange={(e) => setCustom({ ...custom, to: e.target.value })} placeholder="إلى آية" className="rounded border p-2 text-sm" /></div><button onClick={() => { const s = ayahRangeQ(custom.surah, custom.from, custom.toSurah, custom.to); if (s) { onAmountOverride(amountEdit.row.date, amountEdit.stream, s); setAmountEdit(null); } }} className="mt-2 w-full rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white">حفظ المقدار المخصص</button></div>
+            <div className="mt-4 border-t pt-3"><div className="mb-2 text-xs font-bold text-slate-500">مخصص من آية إلى آية</div><div className="grid grid-cols-2 gap-2"><input value={custom.surah} onChange={(e) => setCustom({ ...custom, surah: e.target.value })} placeholder="السورة (رقم)" className="rounded border p-2 text-sm" /><input value={custom.from} onChange={(e) => setCustom({ ...custom, from: e.target.value })} placeholder="من آية" className="rounded border p-2 text-sm" /><input value={custom.toSurah} onChange={(e) => setCustom({ ...custom, toSurah: e.target.value })} placeholder="إلى سورة" className="rounded border p-2 text-sm" /><input value={custom.to} onChange={(e) => setCustom({ ...custom, to: e.target.value })} placeholder="إلى آية" className="rounded border p-2 text-sm" /></div><button onClick={() => { const s = ayahRangeQ(custom.surah, custom.from, custom.toSurah, custom.to); if (s) { onAmountOverride(amountEdit.row.date, amountEdit.stream, s); setAmountEdit(null); } }} className="mt-2 w-full rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white">تثبيت المقدار المخصص</button></div>
           </div>
         </div>
       )}

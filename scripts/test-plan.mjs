@@ -267,4 +267,42 @@ ok('minor: never auto-estimated, frozen until marked, slides independently on «
 }
 ok('major: auto descending من الناس إلى الفاتحة, optional, independent');
 
+/* 17. major: dose is CHOSEN like the hifz wird (majorBaseQ) — never inherited
+      from the hifz amount; «لا يوجد» behaves exactly like «غائب/لم تتم» */
+{
+  const se = { startDate: '2026-09-20', endDate: '2026-09-23', holidays: '' };
+  // hifz dose ¼ وجه but major dose chosen = وجه (4 q): major must NOT inherit ¼
+  let p = buildPlan({ from: 1, to: 114, dailyHifz: 0.25, majorEnabled: true, majorBaseQ: 4 }, se);
+  let days = p.rows.filter((r) => r.type === 'day');
+  assert.equal(days[0].major.plannedQ, 4, 'major dose = the chosen majorBaseQ, never the hifz dose');
+  assert.deepEqual([days[0].major.qLo, days[0].major.qHi], [2412, 2416], 'day 1 = last full face (الناس)');
+  assert.deepEqual([days[1].major.qLo, days[1].major.qHi], [2408, 2412], 'day 2 continues descending by the chosen dose');
+  assert.equal(days[0].major.cycle, 1, 'cycle counted over the whole-Quran slot count');
+  // legacy student without a stored choice keeps the نصف وجه fallback
+  p = buildPlan({ from: 1, to: 114, dailyHifz: 0.25, majorEnabled: true }, se);
+  days = p.rows.filter((r) => r.type === 'day');
+  assert.equal(days[0].major.plannedQ, 2, 'missing majorBaseQ falls back to نصف وجه');
+  // «لا يوجد»: marks the day, burns the slot, slides the ride — like غائب/لم تتم
+  p = buildPlan({
+    from: 1, to: 114, dailyHifz: 0.5, majorEnabled: true, majorBaseQ: 2,
+    statuses: { '2026-09-20': { major: 'none' } },
+  }, se);
+  days = p.rows.filter((r) => r.type === 'day');
+  assert.equal(days[0].major.status, 'none', '«لا يوجد» stored and rendered');
+  assert.equal(days[0].major.qLo, null, 'burned day shows its badge, not a fresh slice');
+  assert.deepEqual([days[1].major.qLo, days[1].major.qHi], [2414, 2416], 'the burned slot re-runs next day — slide, never merge');
+  assert.equal(p.stats.major.none, 1);
+  assert.equal(p.savedQ, 0, 'hifz untouched by major marks');
+  // «لا يوجد» stacks with «لم تتم»: two burned days -> two-day slide
+  p = buildPlan({
+    from: 1, to: 114, dailyHifz: 0.5, majorEnabled: true, majorBaseQ: 2,
+    statuses: { '2026-09-20': { major: 'none' }, '2026-09-21': { major: 'missed' } },
+  }, se);
+  days = p.rows.filter((r) => r.type === 'day');
+  assert.deepEqual([days[2].major.qLo, days[2].major.qHi], [2414, 2416], 'two burned slots -> the ride re-runs slot 0 two days later');
+  assert.equal(p.stats.major.none, 1);
+  assert.equal(p.stats.major.missed, 1);
+}
+ok('major: chosen daily dose (like the hifz wird) + «لا يوجد» slides exactly like غائب/لم تتم');
+
 console.log(`\nALL ${n} PLAN/QURAN CHECKS PASSED`);

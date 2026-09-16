@@ -8,3 +8,5 @@ build/
 
 out-root/
 out-v3/
+.tmp-render-test.mjs
+.tmp-*.mjs

@@ -14,7 +14,8 @@
     "test": "node scripts/test-plan.mjs",
     "pretest": "npm run gen",
     "test:ui": "npx esbuild scripts/render-test.mjs --bundle --platform=node --format=esm --outfile=.tmp-render-test.mjs --loader:.jsx=jsx --jsx=automatic --packages=external --log-level=error && node .tmp-render-test.mjs && rm -f .tmp-render-test.mjs",
-    "test:all": "npm run test --silent && npm run test:ui --silent && npm run test:dom --silent",
+    "test:click": "npx esbuild scripts/click-entry.mjs --bundle --platform=node --format=esm --outfile=.tmp-click-entry.mjs --loader:.jsx=jsx --jsx=automatic --packages=external --log-level=error && node scripts/click-none-test.mjs && rm -f .tmp-click-entry.mjs",
+    "test:all": "npm run test --silent && npm run test:ui --silent && npm run test:click --silent && npm run test:dom --silent",
     "test:dom": "node scripts/jsdom-smoke.mjs"
   },
   "dependencies": {
