@@ -55,17 +55,31 @@ jobs:
       - name: Write local.properties
         run: echo "sdk.dir=${ANDROID_HOME:-/usr/local/lib/android/sdk}" > android/local.properties
 
-      # AGP 8.13 requires JDK 17 — the runner's default JAVA_HOME is not
-      # guaranteed to be 17, so pin it explicitly.
-      - name: Set up JDK 17
+      # Capacitor 8's generated capacitor.build.gradle compiles with
+      # source/target 21 — the toolchain JDK must be 21 (pinned explicitly;
+      # the runner's default JAVA_HOME is not guaranteed).
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --console=plain --stacktrace
+        run: |
+          set -o pipefail
+          if ! ./gradlew assembleDebug --no-daemon --console=plain --stacktrace 2>&1 | tee /tmp/gradle-build.log; then
+            # Surface the real error in the run summary + a GitHub API
+            # annotation so it is readable without log access.
+            {
+              echo '### ⚠️ Gradle build failed — last 120 lines'
+              echo '```'
+              tail -n 120 /tmp/gradle-build.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Gradle build failed (full tail in run summary)::$(tail -n 15 /tmp/gradle-build.log | tr '\n' ' | ' | head -c 1500)"
+            exit 1
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

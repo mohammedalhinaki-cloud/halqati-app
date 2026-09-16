@@ -123,8 +123,9 @@ another phone does NOT copy the data (per-device, by design).
 
 ### Build the APK on your PC
 
-Prereqs: [JDK 17](https://adoptium.net) + Android SDK (easiest: install Android Studio
-once — it provisions the SDK; or install the command-line tools via `sdkmanager`). Then:
+Prereqs: [JDK 21](https://adoptium.net) (Capacitor 8 compiles with Java 21) + Android SDK
+(easiest: install Android Studio once — it provisions the SDK; or install the
+command-line tools via `sdkmanager`). Then:
 
 ```bash
 npm install
